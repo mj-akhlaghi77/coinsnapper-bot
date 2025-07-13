@@ -85,18 +85,23 @@ async def crypto_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
             num_pairs = result["num_market_pairs"]
             rank = result["cmc_rank"]
 
-            msg = f"""🔍 اطلاعات ارز:
+            # جایگزین کردن None با مقادیر امن
+def safe_number(value, fmt="{:,.2f}"):
+    return fmt.format(value) if value is not None else "نامشخص"
+
+# استفاده در پیام:
+msg = f"""🔍 اطلاعات ارز:
 🏷️ نام: {name}
 💱 نماد: {symbol}
-💵 قیمت: ${price:,.2f}
-⏱️ تغییر ۱ ساعته: {change_1h:.2f}%
-📊 تغییر ۲۴ ساعته: {change_24h:.2f}%
-📅 تغییر ۷ روزه: {change_7d:.2f}%
-📈 حجم معاملات ۲۴ساعته: ${volume_24h:,.0f}
-💰 ارزش کل بازار: ${market_cap:,.2f}
-🔄 عرضه در گردش: {circulating_supply:,.0f} {symbol}
-🌐 عرضه کل: {total_supply:,.0f} {symbol}
-🚀 عرضه نهایی: {max_supply:,.0f} {symbol}
+💵 قیمت: ${safe_number(price)}
+⏱️ تغییر ۱ ساعته: {safe_number(change_1h, "{:.2f}")}%
+📊 تغییر ۲۴ ساعته: {safe_number(change_24h, "{:.2f}")}%
+📅 تغییر ۷ روزه: {safe_number(change_7d, "{:.2f}")}%
+📈 حجم معاملات ۲۴ساعته: ${safe_number(volume_24h, "{:,.0f}")}
+💰 ارزش کل بازار: ${safe_number(market_cap, "{:,.0f}")}
+🔄 عرضه در گردش: {safe_number(circulating_supply, "{:,.0f}")} {symbol}
+🌐 عرضه کل: {safe_number(total_supply, "{:,.0f}")} {symbol}
+🚀 عرضه نهایی: {safe_number(max_supply, "{:,.0f}")} {symbol}
 🛒 تعداد بازارها: {num_pairs}
 🏅 رتبه بازار: #{rank}"""
 
