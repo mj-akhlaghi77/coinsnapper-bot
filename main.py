@@ -54,7 +54,7 @@ async def crypto_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
 🏷️ نام: {name}
 💱 نماد: {symbol}
 💵 قیمت: ${price:,.2f}
-⏱️ تغییر ۱ ساعته: {change1h:.2f}%
+⏱️ تغییر ۱ ساعته: {change_1h:.2f}%
 📊 تغییر ۲۴ ساعته: {change_24h:.2f}%
 📅 تغییر ۷ روزه: {change_7d:.2f}%
 📈 حجم معاملات ۲۴ساعته: ${volume_24h:,.0f}
