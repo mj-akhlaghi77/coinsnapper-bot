@@ -1,33 +1,68 @@
 import os
 import requests
-from telegram import Update
+from telegram import Update, ReplyKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
 
-# گرفتن توکن‌ها از متغیرهای محیطی
+# دریافت توکن‌ها از متغیر محیطی
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 CMC_API_KEY = os.getenv("CMC_API_KEY")
 
 # /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("سلام! 👋\nنام یا نماد یک ارز دیجیتال (مثل BTC یا Ethereum) رو بفرست تا اطلاعات کامل اون رو نشونت بدم.")
+    keyboard = [["📊 وضعیت کلی بازار"]]
+    markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+    await update.message.reply_text(
+        "سلام! 👋\nنام یا نماد یک ارز دیجیتال (مثل BTC یا Ethereum) رو بفرست یا از منوی زیر استفاده کن:",
+        reply_markup=markup
+    )
 
-# هندل پیام کاربر برای دریافت اطلاعات ارز
-async def crypto_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.message.text.strip().lower()
-
-    listings_url = "https://pro-api.coinmarketcap.com/v1/cryptocurrency/listings/latest"
+# نمایش وضعیت کلی بازار
+async def show_global_market(update: Update):
     global_url = "https://pro-api.coinmarketcap.com/v1/global-metrics/quotes/latest"
-
     headers = {
         "Accepts": "application/json",
         "X-CMC_PRO_API_KEY": CMC_API_KEY,
     }
 
     try:
-        # درخواست برای اطلاعات ارز
-        listings_response = requests.get(listings_url, headers=headers, params={"limit": 200, "convert": "USD"})
-        listings_response.raise_for_status()
-        data = listings_response.json()
+        response = requests.get(global_url, headers=headers)
+        response.raise_for_status()
+        data = response.json()["data"]
+
+        total_market_cap = data["quote"]["USD"]["total_market_cap"]
+        total_volume_24h = data["quote"]["USD"]["total_volume_24h"]
+        btc_dominance = data["btc_dominance"]
+
+        msg = f"""🌐 وضعیت کلی بازار کریپتو:
+💰 ارزش کل بازار: ${total_market_cap:,.0f}
+📊 حجم معاملات ۲۴ساعته: ${total_volume_24h:,.0f}
+🟠 دامیننس بیت‌کوین: {btc_dominance:.2f}%"""
+
+        await update.message.reply_text(msg)
+
+    except requests.RequestException as e:
+        print(f"Global market error: {e}")
+        await update.message.reply_text("⚠️ خطا در دریافت اطلاعات کلی بازار.")
+
+# پاسخ به ارز دیجیتال یا دکمه کلی بازار
+async def crypto_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.message.text.strip().lower()
+
+    if query == "📊 وضعیت کلی بازار":
+        await show_global_market(update)
+        return
+
+    listings_url = "https://pro-api.coinmarketcap.com/v1/cryptocurrency/listings/latest"
+    headers = {
+        "Accepts": "application/json",
+        "X-CMC_PRO_API_KEY": CMC_API_KEY,
+    }
+    params = {"limit": 200, "convert": "USD"}
+
+    try:
+        response = requests.get(listings_url, headers=headers, params=params)
+        response.raise_for_status()
+        data = response.json()
 
         result = next(
             (coin for coin in data["data"]
@@ -69,29 +104,16 @@ async def crypto_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
         else:
             await update.message.reply_text("❌ ارز مورد نظر پیدا نشد. لطفاً نام یا نماد دقیق (مثل BTC) رو وارد کن.")
 
-        # اطلاعات کلی بازار
-        global_response = requests.get(global_url, headers=headers)
-        global_response.raise_for_status()
-        global_data = global_response.json()["data"]
-
-        total_market_cap = global_data["quote"]["USD"]["total_market_cap"]
-        total_volume_24h = global_data["quote"]["USD"]["total_volume_24h"]
-        btc_dominance = global_data["btc_dominance"]
-
-        global_msg = f"""🌐 وضعیت کلی بازار کریپتو:
-💰 ارزش کل بازار: ${total_market_cap:,.0f}
-📊 حجم معاملات ۲۴ساعته کل: ${total_volume_24h:,.0f}
-🟠 دامیننس بیت‌کوین: {btc_dominance:.2f}%"""
-
-        await update.message.reply_text(global_msg)
-
     except requests.RequestException as e:
-        print(f"خطا در دریافت اطلاعات: {e}")
-        await update.message.reply_text("⚠️ خطا در دریافت اطلاعات. لطفاً بعداً تلاش کن.")
+        print(f"خطا در دریافت اطلاعات ارز: {e}")
+        await update.message.reply_text("⚠️ خطا در دریافت اطلاعات ارز. لطفاً بعداً تلاش کن.")
 
-# اجرای برنامه
+# اجرای ربات
 if __name__ == "__main__":
-    app = ApplicationBuilder().token(BOT_TOKEN).build()
+    app = ApplicationBuilder().token(B
+
+
+OT_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, crypto_info))
 
