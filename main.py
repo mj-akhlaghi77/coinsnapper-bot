@@ -3,7 +3,7 @@ from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
 
 # Bot token and CoinMarketCap API key
-BOT_TOKEN = "8195612931:AAEdfLBuIAAx0GKX3gFBHWSjRLGsc78sgUI"
+BOT_TOKEN = "7889227586:AAH_3dCVmmrmV98jNhXNBeWDGLKmBykCPGw"
 CMC_API_KEY = "3052d5d6-06fe-4c14-8d0f-444bb09bf638"
 
 # Start command
