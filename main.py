@@ -7,6 +7,10 @@ from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, fil
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 CMC_API_KEY = os.getenv("CMC_API_KEY")
 
+# بررسی وجود توکن‌ها
+if not BOT_TOKEN or not CMC_API_KEY:
+    raise ValueError("BOT_TOKEN یا CMC_API_KEY در متغیرهای محیطی تنظیم نشده‌اند.")
+
 # 🔧 تبدیل امن اعداد (برای جلوگیری از ارور NoneType)
 def safe_number(value, fmt="{:,.2f}"):
     return fmt.format(value) if value is not None else "نامشخص"
@@ -31,11 +35,14 @@ async def show_global_market(update: Update):
     try:
         response = requests.get(url, headers=headers)
         response.raise_for_status()
-        data = response.json()["data"]
+        data = response.json()
 
-        total_market_cap = data["quote"]["USD"]["total_market_cap"]
-        total_volume_24h = data["quote"]["USD"]["total_volume_24h"]
-        btc_dominance = data["btc_dominance"]
+        if "data" not in data:
+            raise ValueError("پاسخ API شامل کلید 'data' نیست.")
+
+        total_market_cap = data["data"]["quote"]["USD"]["total_market_cap"]
+        total_volume_24h = data["data"]["quote"]["USD"]["total_volume_24h"]
+        btc_dominance = data["data"]["btc_dominance"]
 
         msg = f"""🌐 وضعیت کلی بازار کریپتو:
 💰 ارزش کل بازار: ${safe_number(total_market_cap, "{:,.0f}")}
@@ -44,7 +51,7 @@ async def show_global_market(update: Update):
 
         await update.message.reply_text(msg)
 
-    except requests.RequestException as e:
+    except (requests.RequestException, ValueError) as e:
         print(f"Global market error: {e}")
         await update.message.reply_text("⚠️ خطا در دریافت اطلاعات کلی بازار.")
 
@@ -68,7 +75,10 @@ async def crypto_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
         response.raise_for_status()
         data = response.json()
 
-      result = None
+        if "data" not in data:
+            raise ValueError("پاسخ API شامل کلید 'data' نیست.")
+
+        result = None
         for coin in data["data"]:
             name_match = coin["name"].lower() == query
             symbol_match = coin["symbol"].lower() == query
@@ -109,12 +119,9 @@ async def crypto_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
             await update.message.reply_text(msg)
         else:
-            await update.message.reply_text("❌ ارز مورد
+            await update.message.reply_text("❌ ارز مورد نظر پیدا نشد. لطفاً نام یا نماد دقیق وارد کنید.")
 
-
-نظر پیدا نشد. لطفاً نام یا نماد دقیق وارد کن.")
-
-    except requests.RequestException as e:
+    except (requests.RequestException, ValueError) as e:
         print(f"خطا در دریافت اطلاعات ارز: {e}")
         await update.message.reply_text("⚠️ خطا در دریافت اطلاعات ارز.")
 
