@@ -1,10 +1,10 @@
 import requests
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
-
+import os
 # Bot token and CoinMarketCap API key
-BOT_TOKEN = "توکن واقعی"
-CMC_API_KEY = "کلید واقعی"
+BOT_TOKEN = os.getenv ("BOT_TOKEN")
+CMC_API_KEY = os.getenv ("CMC_API_KEY")
 
 # Start command
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
