@@ -3,8 +3,8 @@ from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
 
 # Bot token and CoinMarketCap API key
-BOT_TOKEN = ""
-CMC_API_KEY = ""
+BOT_TOKEN = "توکن واقعی"
+CMC_API_KEY = "کلید واقعی"
 
 # Start command
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
