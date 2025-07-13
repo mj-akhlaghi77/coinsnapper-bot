@@ -68,11 +68,15 @@ async def crypto_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
         response.raise_for_status()
         data = response.json()
 
-        result = next(
-            (coin for coin in data["data"]
-             if coin["name"].lower() == query or coin["symbol"].lower() == query),
-            None
-        )
+       result = None
+for coin in data["data"]:
+    name_match = coin["name"].lower() == query
+    symbol_match = coin["symbol"].lower() == query
+    if name_match or symbol_match:
+        result = coin
+        break
+
+    print(f"🔍 Checking: {coin['name']} / {coin['symbol']} -- Match: {name_match or symbol_match}")
 
         if result:
             name = result["name"]
