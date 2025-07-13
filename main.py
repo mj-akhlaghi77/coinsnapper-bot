@@ -68,7 +68,7 @@ async def crypto_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Accepts": "application/json",
         "X-CMC_PRO_API_KEY": CMC_API_KEY,
     }
-    params = {"start": 1, "limit": 5000, "convert": "USD"}  # برای پشتیبانی از همه ارزها
+    params = {"start": 1, "limit": 5000, "convert": "USD"}
 
     try:
         response = requests.get(url, headers=headers, params=params)
