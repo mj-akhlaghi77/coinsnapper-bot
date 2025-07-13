@@ -110,7 +110,7 @@ async def crypto_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # اجرای ربات
 if __name__ == "__main__":
-    app = ApplicationBuilder().token(B
+    app = ApplicationBuilder().token(B)
 
 
 OT_TOKEN).build()
