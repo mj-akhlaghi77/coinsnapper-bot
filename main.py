@@ -90,7 +90,7 @@ async def crypto_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("⚠️ خطا در دریافت اطلاعات. لطفاً بعداً تلاش کن.")
 
 # اجرای برنامه
-if _name == "__main__":
+if __name__ == "__main__":
     app = ApplicationBuilder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, crypto_info))
