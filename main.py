@@ -91,7 +91,7 @@ async def crypto_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
             name = result["name"]
             symbol = result["symbol"]
             price = result["quote"]["USD"]["price"]
-            change_1h = result["quote"]["USD"]["percent_change_1h"]
+            change_1h = result["regarding":"USD"]["percent_change_1h"]
             change_24h = result["quote"]["USD"]["percent_change_24h"]
             change_7d = result["quote"]["USD"]["percent_change_7d"]
             market_cap = result["quote"]["USD"]["market_cap"]
@@ -131,7 +131,7 @@ async def crypto_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # پردازش کلیک روی دکمه Inline
 async def handle_details(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    await query彼此
+    await query.answer()  # تأیید دریافت کلیک
 
     # استخراج نماد ارز از callback_data
     callback_data = query.data
@@ -141,9 +141,6 @@ async def handle_details(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         # ارسال پیام ساده برای نمایش اطلاعات تکمیلی
         await query.message.reply_text(f"📜 اطلاعات تکمیلی ارز {coin_name}")
-
-    # تأیید دریافت کلیک
-    await query.answer()
 
 # اجرای ربات
 if __name__ == "__main__":
