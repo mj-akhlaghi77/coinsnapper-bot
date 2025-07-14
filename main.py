@@ -110,24 +110,24 @@ async def crypto_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
             rank = result["cmc_rank"]
 
             msg = f"""🔍 اطلاعات ارز:
-🏷️ نام: {name}
-💱 نماد: {symbol}
-💵 قیمت: ${safe_number(price)}
-⏱️ تغییر ۱ ساعته: {safe_number(change_1h, "{:.2f}")}%
-📊 تغییر ۲۴ ساعته: {safe_number(change_24h, "{:.2f}")}%
-📅 تغییر ۷ روزه: {safe_number(change_7d, "{:.2f}")}%
-📈 حجم معاملات ۲۴ساعته: ${safe_number(volume_24h, "{:,.0f}")}
-💰 ارزش کل بازار: ${safe_number(market_cap, "{:,.0f}")}
-🔄 عرضه در گردش: ${safe_number(circulating_supply, "{:,.0f}")} {symbol}
-🌐 عرضه کل: {safe_number(total_supply, "{:,.0f}")} {symbol}
-🚀 عرضه نهایی: {safe_number(max_supply, "{:,.0f}")} {symbol}
-🛒 تعداد بازارها: {num_pairs}
-🏅 رتبه بازار: #{rank}"""
+🏷️ *نام*: {name}
+💱 *نماد*: {symbol}
+💵 *قیمت*: ${safe_number(price)}
+⏱️ *تغییر ۱ ساعته*: {safe_number(change_1h, "{:.2f}")}%
+📊 *تغییر ۲۴ ساعته*: {safe_number(change_24h, "{:.2f}")}%
+📅 *تغییر ۷ روزه*: {safe_number(change_7d, "{:.2f}")}%
+📈 *حجم معاملات ۲۴ساعته*: ${safe_number(volume_24h, "{:,.0f}")}
+💰 *ارزش کل بازار*: ${safe_number(market_cap, "{:,.0f}")}
+🔄 *عرضه در گردش*: {safe_number(circulating_supply, "{:,.0f}")} {symbol}
+🌐 *عرضه کل*: {safe_number(total_supply, "{:,.0f}")} {symbol}
+🚀 *عرضه نهایی*: {safe_number(max_supply, "{:,.0f}")} {symbol}
+🛒 *تعداد بازارها*: {num_pairs}
+🏅 *رتبه بازار*: #{rank}"""
 
             # اضافه کردن دکمه Inline
             keyboard = [[InlineKeyboardButton("📜 نمایش اطلاعات تکمیلی", callback_data=f"details_{symbol}")]]
             reply_markup = InlineKeyboardMarkup(keyboard)
-            await update.message.reply_text(msg, reply_markup=reply_markup)
+            await update.message.reply_text(msg, parse_mode="Markdown")
         else:
             await update.message.reply_text("❌ ارز مورد نظر پیدا نشد. لطفاً نام یا نماد دقیق وارد کنید.")
 
@@ -144,12 +144,26 @@ async def handle_details(update: Update, context: ContextTypes.DEFAULT_TYPE):
     callback_data = query.data
     if callback_data.startswith("details_"):
         symbol = callback_data[len("details_"):]  # استخراج نماد ارز (مثل BTC)
-        coin_name = symbol  # برای سادگی، فعلاً از symbol استفاده می‌کنیم
 
-        # ارسال پیام ساده برای نمایش اطلاعات تکمیلی
-        await query.message.reply_text(f"📜 اطلاعات تکمیلی ارز {coin_name}")
+        # پیام با قالب‌بندی زیبا برای شبیه‌سازی دیالوگ
+        msg = f"📜 *اطلاعات تکمیلی ارز {symbol}*\n\n" \
+              f"اینجا اطلاعات تکمیلی ارز {symbol} نمایش داده می‌شود.\n" \
+              f"برای بستن این پنجره، روی دکمه زیر کلیک کنید."
+
+        # اضافه کردن دکمه "بستن"
+        keyboard = [[InlineKeyboardButton("❌ بستن", callback_data=f"close_details_{symbol}")]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await query.message.reply_text(msg, parse_mode="Markdown", reply_markup=reply_markup)
     else:
         await query.message.reply_text("⚠️ خطا: درخواست نامعتبر.")
+
+# پردازش دکمه "بستن"
+async def handle_close_details(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()  # تأیید دریافت کلیک
+
+    # حذف پیام دیالوگ
+    await query.message.delete()
 
 # اجرای ربات
 if __name__ == "__main__":
@@ -159,6 +173,7 @@ if __name__ == "__main__":
         app.add_handler(CommandHandler("start", start))
         app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, crypto_info))
         app.add_handler(CallbackQueryHandler(handle_details, pattern="^details_"))
+        app.add_handler(CallbackQueryHandler(handle_close_details, pattern="^close_details_"))
 
         print("Bot is running...")
         app.run_polling()
