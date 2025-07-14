@@ -1,7 +1,7 @@
 import os
 import requests
-from telegram import Update, ReplyKeyboardMarkup
-from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
+from telegram import Update, ReplyKeyboardMarkup, InlineKeyboardMarkup, InlineKeyboardButton
+from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes
 
 # دریافت توکن‌ها از محیط
 BOT_TOKEN = os.getenv("BOT_TOKEN")
@@ -117,7 +117,10 @@ async def crypto_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
 🛒 تعداد بازارها: {num_pairs}
 🏅 رتبه بازار: #{rank}"""
 
-            await update.message.reply_text(msg)
+            # اضافه کردن دکمه Inline
+            keyboard = [[InlineKeyboardButton("📜 نمایش اطلاعات تکمیلی", callback_data=f"details_{symbol}")]]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+            await update.message.reply_text(msg, reply_markup=reply_markup)
         else:
             await update.message.reply_text("❌ ارز مورد نظر پیدا نشد. لطفاً نام یا نماد دقیق وارد کنید.")
 
