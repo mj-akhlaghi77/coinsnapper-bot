@@ -128,11 +128,29 @@ async def crypto_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
         print(f"خطا در دریافت اطلاعات ارز: {e}")
         await update.message.reply_text("⚠️ خطا در دریافت اطلاعات ارز.")
 
+# پردازش کلیک روی دکمه Inline
+async def handle_details(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query彼此
+
+    # استخراج نماد ارز از callback_data
+    callback_data = query.data
+    if callback_data.startswith("details_"):
+        symbol = callback_data[len("details_"):]  # استخراج نماد ارز (مثل BTC)
+        coin_name = symbol  # برای سادگی، فعلاً از symbol استفاده می‌کنیم
+
+        # ارسال پیام ساده برای نمایش اطلاعات تکمیلی
+        await query.message.reply_text(f"📜 اطلاعات تکمیلی ارز {coin_name}")
+
+    # تأیید دریافت کلیک
+    await query.answer()
+
 # اجرای ربات
 if __name__ == "__main__":
     app = ApplicationBuilder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, crypto_info))
+    app.add_handler(CallbackQueryHandler(handle_details, pattern="^details_"))
 
     print("Bot is running...")
     app.run_polling()
