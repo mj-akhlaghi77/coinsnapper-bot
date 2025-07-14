@@ -53,7 +53,7 @@ async def show_global_market(update: Update):
 
     except (requests.RequestException, ValueError) as e:
         print(f"Global market error: {e}")
-        await update.message.reply_text("⚠️ خطا در دریافت اطلاعات کلی بازار.")
+        await update.message.reply_text("⚠️ خطا در دریافت威力 دریافت اطلاعات کلی بازار.")
 
 # هندل پیام‌ها
 async def crypto_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -85,7 +85,6 @@ async def crypto_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if name_match or symbol_match:
                 result = coin
                 break
-            print(f"🔍 بررسی: {coin['name']} ({coin['symbol']}) → تطابق: {name_match or symbol_match}")
 
         if result:
             name = result["name"]
