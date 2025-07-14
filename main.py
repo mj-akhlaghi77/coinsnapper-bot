@@ -40,7 +40,7 @@ async def show_global_market(update: Update):
         if "data" not in data:
             raise ValueError("پاسخ API شامل کلید 'data' نیست.")
 
-        total_market_cap = Renata: data["data"]["quote"]["USD"]["total_market_cap"]
+        total_market_cap = data["data"]["quote"]["USD"]["total_market_cap"]
         total_volume_24h = data["data"]["quote"]["USD"]["total_volume_24h"]
         btc_dominance = data["data"]["btc_dominance"]
 
@@ -141,13 +141,19 @@ async def handle_details(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         # ارسال پیام ساده برای نمایش اطلاعات تکمیلی
         await query.message.reply_text(f"📜 اطلاعات تکمیلی ارز {coin_name}")
+    else:
+        await query.message.reply_text("⚠️ خطا: درخواست نامعتبر.")
 
 # اجرای ربات
 if __name__ == "__main__":
-    app = ApplicationBuilder().token(BOT_TOKEN).build()
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, crypto_info))
-    app.add_handler(CallbackQueryHandler(handle_details, pattern="^details_"))
+    try:
+        app = ApplicationBuilder().token(BOT_TOKEN).build()
+        app.add_handler(CommandHandler("start", start))
+        app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, crypto_info))
+        app.add_handler(CallbackQueryHandler(handle_details, pattern="^details_"))
 
-    print("Bot is running...")
-    app.run_polling()
+        print("Bot is running...")
+        app.run_polling()
+    except Exception as e:
+        print(f"Error starting bot: {e}")
+        raise
