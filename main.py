@@ -50,12 +50,12 @@ async def show_global_market(update: Update):
         total_volume_24h = data["data"]["quote"]["USD"]["total_volume_24h"]
         btc_dominance = data["data"]["btc_dominance"]
 
-        msg = f"""🌐 *وضعیت کلی بازار کریپتو*:
-💰 *ارزش کل بازار*: ${safe_number(total_market_cap, "{:,.0f}")}
-📊 *حجم معاملات ۲۴ساعته*: ${safe_number(total_volume_24h, "{:,.0f}")}
-🟠 *دامیننس بیت‌کوین*: {safe_number(btc_dominance, "{:.2f}")}%"""
+        msg = f"""🌐 وضعیت کلی بازار کریپتو:
+💰 ارزش کل بازار: ${safe_number(total_market_cap, "{:,.0f}")}
+📊 حجم معاملات ۲۴ساعته: ${safe_number(total_volume_24h, "{:,.0f}")}
+🟠 دامیننس بیت‌کوین: {safe_number(btc_dominance, "{:.2f}")}%"""
 
-        await update.message.reply_text(msg, parse_mode="Markdown")
+        await update.message.reply_text(msg)
 
     except (requests.RequestException, ValueError) as e:
         print(f"Global market error: {e}")
@@ -109,7 +109,7 @@ async def crypto_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
             num_pairs = result["num_market_pairs"]
             rank = result["cmc_rank"]
 
-            msg = f"""🔍 *اطلاعات ارز*:
+            msg = f"""🔍 اطلاعات ارز:
 🏷️ *نام*: {name}
 💱 *نماد*: {symbol}
 💵 *قیمت*: ${safe_number(price)}
@@ -147,7 +147,7 @@ async def handle_details(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         # پیام با قالب‌بندی زیبا برای شبیه‌سازی دیالوگ
         msg = f"📜 *اطلاعات تکمیلی ارز {symbol}*\n\n" \
-              f"🔎 در حال حاضر اطلاعات تکمیلی برای *{symbol}* در دسترس است.\n" \
+              f"اینجا اطلاعات تکمیلی ارز {symbol} نمایش داده می‌شود.\n" \
               f"برای بستن این پنجره، روی دکمه زیر کلیک کنید."
 
         # اضافه کردن دکمه "بستن"
@@ -163,12 +163,7 @@ async def handle_close_details(update: Update, context: ContextTypes.DEFAULT_TYP
     await query.answer()  # تأیید دریافت کلیک
 
     # حذف پیام دیالوگ
-    try:
-        await query.message.delete()
-        print(f"Dialog message for {query.data} deleted successfully.")
-    except Exception as e:
-        print(f"Error deleting dialog message: {e}")
-        await query.message.reply_text("⚠️ خطا در بستن پنجره.")
+    await query.message.delete()
 
 # اجرای ربات
 if __name__ == "__main__":
