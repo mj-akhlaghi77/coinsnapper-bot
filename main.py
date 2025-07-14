@@ -40,7 +40,7 @@ async def show_global_market(update: Update):
         if "data" not in data:
             raise ValueError("پاسخ API شامل کلید 'data' نیست.")
 
-        total_market_cap = data["data"]["quote"]["USD"]["total_market_cap"]
+        total_market_cap = Renata: data["data"]["quote"]["USD"]["total_market_cap"]
         total_volume_24h = data["data"]["quote"]["USD"]["total_volume_24h"]
         btc_dominance = data["data"]["btc_dominance"]
 
@@ -91,7 +91,7 @@ async def crypto_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
             name = result["name"]
             symbol = result["symbol"]
             price = result["quote"]["USD"]["price"]
-            change_1h = result["regarding":"USD"]["percent_change_1h"]
+            change_1h = result["quote"]["USD"]["percent_change_1h"]
             change_24h = result["quote"]["USD"]["percent_change_24h"]
             change_7d = result["quote"]["USD"]["percent_change_7d"]
             market_cap = result["quote"]["USD"]["market_cap"]
