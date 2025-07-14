@@ -8,8 +8,12 @@ BOT_TOKEN = os.getenv("BOT_TOKEN")
 CMC_API_KEY = os.getenv("CMC_API_KEY")
 
 # بررسی وجود توکن‌ها
-if not BOT_TOKEN or not CMC_API_KEY:
-    raise ValueError("BOT_TOKEN یا CMC_API_KEY در متغیرهای محیطی تنظیم نشده‌اند.")
+if not BOT_TOKEN:
+    print("Error: BOT_TOKEN is not set in environment variables.")
+    raise ValueError("BOT_TOKEN در متغیرهای محیطی تنظیم نشده است.")
+if not CMC_API_KEY:
+    print("Error: CMC_API_KEY is not set in environment variables.")
+    raise ValueError("CMC_API_KEY در متغیرهای محیطی تنظیم نشده است.")
 
 # 🔧 تبدیل امن اعداد (برای جلوگیری از ارور NoneType)
 def safe_number(value, fmt="{:,.2f}"):
@@ -33,11 +37,13 @@ async def show_global_market(update: Update):
     }
 
     try:
+        print("Sending request to CoinMarketCap API for global market data...")
         response = requests.get(url, headers=headers)
         response.raise_for_status()
         data = response.json()
 
         if "data" not in data:
+            print("Error: 'data' key not found in API response.")
             raise ValueError("پاسخ API شامل کلید 'data' نیست.")
 
         total_market_cap = data["data"]["quote"]["USD"]["total_market_cap"]
@@ -53,7 +59,7 @@ async def show_global_market(update: Update):
 
     except (requests.RequestException, ValueError) as e:
         print(f"Global market error: {e}")
-        await update.message.reply_text("⚠️ خطا در دریافت威力 دریافت اطلاعات کلی بازار.")
+        await update.message.reply_text("⚠️ خطا در دریافت اطلاعات کلی بازار.")
 
 # هندل پیام‌ها
 async def crypto_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -71,11 +77,13 @@ async def crypto_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
     params = {"start": 1, "limit": 5000, "convert": "USD"}
 
     try:
+        print(f"Sending request to CoinMarketCap API for coin: {query}")
         response = requests.get(url, headers=headers, params=params)
         response.raise_for_status()
         data = response.json()
 
         if "data" not in data:
+            print("Error: 'data' key not found in API response.")
             raise ValueError("پاسخ API شامل کلید 'data' نیست.")
 
         result = None
@@ -110,7 +118,7 @@ async def crypto_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
 📅 تغییر ۷ روزه: {safe_number(change_7d, "{:.2f}")}%
 📈 حجم معاملات ۲۴ساعته: ${safe_number(volume_24h, "{:,.0f}")}
 💰 ارزش کل بازار: ${safe_number(market_cap, "{:,.0f}")}
-🔄 عرضه در گردش: {safe_number(circulating_supply, "{:,.0f}")} {symbol}
+🔄 عرضه در گردش: ${safe_number(circulating_supply, "{:,.0f}")} {symbol}
 🌐 عرضه کل: {safe_number(total_supply, "{:,.0f}")} {symbol}
 🚀 عرضه نهایی: {safe_number(max_supply, "{:,.0f}")} {symbol}
 🛒 تعداد بازارها: {num_pairs}
@@ -124,7 +132,7 @@ async def crypto_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("❌ ارز مورد نظر پیدا نشد. لطفاً نام یا نماد دقیق وارد کنید.")
 
     except (requests.RequestException, ValueError) as e:
-        print(f"خطا در دریافت اطلاعات ارز: {e}")
+        print(f"Error fetching coin data: {e}")
         await update.message.reply_text("⚠️ خطا در دریافت اطلاعات ارز.")
 
 # پردازش کلیک روی دکمه Inline
@@ -146,6 +154,7 @@ async def handle_details(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # اجرای ربات
 if __name__ == "__main__":
     try:
+        print("Initializing Telegram bot...")
         app = ApplicationBuilder().token(BOT_TOKEN).build()
         app.add_handler(CommandHandler("start", start))
         app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, crypto_info))
