@@ -1,6 +1,7 @@
 import os
 import json
 import requests
+import asyncio
 from datetime import datetime
 from telegram import Update, ReplyKeyboardMarkup, InlineKeyboardMarkup, InlineKeyboardButton, Bot, BotCommand
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes
@@ -232,8 +233,8 @@ async def handle_close_details(update: Update, context: ContextTypes.DEFAULT_TYP
     print("Closing dialog message...")
     await query.message.delete()
 
-# اجرای ربات
-if __name__ == "__main__":
+# تابع اصلی برای اجرای ربات
+async def main():
     try:
         print("Initializing Telegram bot...")
         app = ApplicationBuilder().token(BOT_TOKEN).build()
@@ -244,13 +245,15 @@ if __name__ == "__main__":
         app.add_handler(CallbackQueryHandler(handle_close_details, pattern="^close_details_"))
         app.add_handler(CommandHandler("setcommands", set_bot_commands))
 
-        # تنظیم منوی دستورات به‌صورت مستقیم
-        import asyncio
-        bot = Bot(token=BOT_TOKEN)
-        asyncio.run(set_bot_commands(bot))
+        # تنظیم منوی دستورات
+        await set_bot_commands(app.bot)
 
         print("Bot is running...")
-        app.run_polling()
+        await app.run_polling()
     except Exception as e:
         print(f"Error starting bot: {e}")
         raise
+
+# اجرای ربات
+if __name__ == "__main__":
+    asyncio.run(main())
