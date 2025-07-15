@@ -50,12 +50,12 @@ async def show_global_market(update: Update):
         total_volume_24h = data["data"]["quote"]["USD"]["total_volume_24h"]
         btc_dominance = data["data"]["btc_dominance"]
 
-        msg = f"""🌐 وضعیت کلی بازار کریپتو:
-💰 ارزش کل بازار: ${safe_number(total_market_cap, "{:,.0f}")}
-📊 حجم معاملات ۲۴ساعته: ${safe_number(total_volume_24h, "{:,.0f}")}
-🟠 دامیننس بیت‌کوین: {safe_number(btc_dominance, "{:.2f}")}%"""
+        msg = f"""🌐 *وضعیت کلی بازار کریپتو*:
+💰 *ارزش کل بازار*: ${safe_number(total_market_cap, "{:,.0f}")}
+📊 *حجم معاملات ۲۴ساعته*: ${safe_number(total_volume_24h, "{:,.0f}")}
+🟠 *دامیننس بیت‌کوین*: {safe_number(btc_dominance, "{:.2f}")}%"""
 
-        await update.message.reply_text(msg)
+        await update.message.reply_text(msg, parse_mode="MarkdownV2")
 
     except (requests.RequestException, ValueError) as e:
         print(f"Global market error: {e}")
@@ -109,25 +109,27 @@ async def crypto_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
             num_pairs = result["num_market_pairs"]
             rank = result["cmc_rank"]
 
-            msg = f"""🔍 اطلاعات ارز:
-🏷️ *نام*: {name}
-💱 *نماد*: {symbol}
-💵 *قیمت*: ${safe_number(price)}
-⏱️ *تغییر ۱ ساعته*: {safe_number(change_1h, "{:.2f}")}%
-📊 *تغییر ۲۴ ساعته*: {safe_number(change_24h, "{:.2f}")}%
-📅 *تغییر ۷ روزه*: {safe_number(change_7d, "{:.2f}")}%
-📈 *حجم معاملات ۲۴ساعته*: ${safe_number(volume_24h, "{:,.0f}")}
-💰 *ارزش کل بازار*: ${safe_number(market_cap, "{:,.0f}")}
-🔄 *عرضه در گردش*: {safe_number(circulating_supply, "{:,.0f}")} {symbol}
-🌐 *عرضه کل*: {safe_number(total_supply, "{:,.0f}")} {symbol}
-🚀 *عرضه نهایی*: {safe_number(max_supply, "{:,.0f}")} {symbol}
+            # فرمت‌بندی پیام با MarkdownV2 (اسکیپ کردن کاراکترهای خاص)
+            msg = f"""🔍 *اطلاعات ارز*:
+🏷️ *نام*: {name.replace('-', '\\-').replace('.', '\\.')}
+💱 *نماد*: {symbol.replace('-', '\\-').replace('.', '\\.')}
+💵 *قیمت*: ${safe_number(price).replace(',', '\\,')}
+⏱️ *تغییر ۱ ساعته*: {safe_number(change_1h, "{:.2f}").replace('-', '\\-').replace('.', '\\.')}%
+📊 *تغییر ۲۴ ساعته*: {safe_number(change_24h, "{:.2f}").replace('-', '\\-').replace('.', '\\.')}%
+📅 *تغییر ۷ روزه*: {safe_number(change_7d, "{:.2f}").replace('-', '\\-').replace('.', '\\.')}%
+📈 *حجم معاملات ۲۴ساعته*: ${safe_number(volume_24h, "{:,.0f}").replace(',', '\\,')}
+💰 *ارزش کل بازار*: ${safe_number(market_cap, "{:,.0f}").replace(',', '\\,')}
+🔄 *عرضه در گردش*: {safe_number(circulating_supply, "{:,.0f}").replace(',', '\\,')} {symbol.replace('-', '\\-').replace('.', '\\.')}
+🌐 *عرضه کل*: {safe_number(total_supply, "{:,.0f}").replace(',', '\\,')} {symbol.replace('-', '\\-').replace('.', '\\.')}
+🚀 *عرضه نهایی*: {safe_number(max_supply, "{:,.0f}").replace(',', '\\,')} {symbol.replace('-', '\\-').replace('.', '\\.')}
 🛒 *تعداد بازارها*: {num_pairs}
 🏅 *رتبه بازار*: #{rank}"""
 
             # اضافه کردن دکمه Inline
             keyboard = [[InlineKeyboardButton("📜 نمایش اطلاعات تکمیلی", callback_data=f"details_{symbol}")]]
             reply_markup = InlineKeyboardMarkup(keyboard)
-            await update.message.reply_text(msg, parse_mode="Markdown")
+            print(f"Sending coin info for {symbol} with inline button...")
+            await update.message.reply_text(msg, parse_mode="MarkdownV2", reply_markup=reply_markup)
         else:
             await update.message.reply_text("❌ ارز مورد نظر پیدا نشد. لطفاً نام یا نماد دقیق وارد کنید.")
 
@@ -146,14 +148,15 @@ async def handle_details(update: Update, context: ContextTypes.DEFAULT_TYPE):
         symbol = callback_data[len("details_"):]  # استخراج نماد ارز (مثل BTC)
 
         # پیام با قالب‌بندی زیبا برای شبیه‌سازی دیالوگ
-        msg = f"📜 *اطلاعات تکمیلی ارز {symbol}*\n\n" \
-              f"اینجا اطلاعات تکمیلی ارز {symbol} نمایش داده می‌شود.\n" \
-              f"برای بستن این پنجره، روی دکمه زیر کلیک کنید."
+        msg = f"📜 *اطلاعات تکمیلی ارز {symbol.replace('-', '\\-').replace('.', '\\.')}*\n\n" \
+              f"اینجا اطلاعات تکمیلی ارز {symbol.replace('-', '\\-').replace('.', '\\.')} نمایش داده می‌شود\\.\n" \
+              f"برای بستن این پنجره، روی دکمه زیر کلیک کنید\\."
 
         # اضافه کردن دکمه "بستن"
         keyboard = [[InlineKeyboardButton("❌ بستن", callback_data=f"close_details_{symbol}")]]
         reply_markup = InlineKeyboardMarkup(keyboard)
-        await query.message.reply_text(msg, parse_mode="Markdown", reply_markup=reply_markup)
+        print(f"Sending dialog-like message for {symbol}...")
+        await query.message.reply_text(msg, parse_mode="MarkdownV2", reply_markup=reply_markup)
     else:
         await query.message.reply_text("⚠️ خطا: درخواست نامعتبر.")
 
@@ -163,6 +166,7 @@ async def handle_close_details(update: Update, context: ContextTypes.DEFAULT_TYP
     await query.answer()  # تأیید دریافت کلیک
 
     # حذف پیام دیالوگ
+    print("Closing dialog message...")
     await query.message.delete()
 
 # اجرای ربات
