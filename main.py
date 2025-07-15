@@ -242,9 +242,9 @@ if __name__ == "__main__":
         app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, crypto_info))
         app.add_handler(CallbackQueryHandler(handle_details, pattern="^details_"))
         app.add_handler(CallbackQueryHandler(handle_close_details, pattern="^close_details_"))
-
-        # اضافه کردن job برای تنظیم منوی دستورات
         app.add_handler(CommandHandler("setcommands", set_bot_commands))
+
+        # تنظیم منوی دستورات با job_queue
         app.job_queue.run_once(set_bot_commands, when=0)
 
         print("Bot is running...")
