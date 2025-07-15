@@ -24,7 +24,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [["📊 وضعیت کلی بازار"]]
     markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
     await update.message.reply_text(
-        "سلام! 👋<br>نام یا نماد یک ارز دیجیتال رو بفرست یا از منوی زیر استفاده کن:",
+        "سلام! 👋\nنام یا نماد یک ارز دیجیتال رو بفرست یا از منوی زیر استفاده کن:",
         parse_mode="HTML",
         reply_markup=markup
     )
@@ -48,9 +48,9 @@ async def show_global_market(update: Update):
         total_volume_24h = data["data"]["quote"]["USD"]["total_volume_24h"]
         btc_dominance = data["data"]["btc_dominance"]
 
-        msg = f"""🌐 <b>وضعیت کلی بازار کریپتو</b>:<br>
-💰 <b>ارزش کل بازار</b>: ${safe_number(total_market_cap, "{:,.0f}")}<br>
-📊 <b>حجم معاملات ۲۴ساعته</b>: ${safe_number(total_volume_24h, "{:,.0f}")}<br>
+        msg = f"""🌐 <b>وضعیت کلی بازار کریپتو</b>:\n
+💰 <b>ارزش کل بازار</b>: ${safe_number(total_market_cap, "{:,.0f}")}\n
+📊 <b>حجم معاملات ۲۴ساعته</b>: ${safe_number(total_volume_24h, "{:,.0f}")}\n
 🟠 <b>دامیننس بیت‌کوین</b>: {safe_number(btc_dominance, "{:.2f}")}%
 """
         await update.message.reply_text(msg, parse_mode="HTML")
@@ -102,23 +102,21 @@ async def crypto_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
             num_pairs = result["num_market_pairs"]
             rank = result["cmc_rank"]
 
-            msg = f"""🔍 <b>اطلاعات ارز</b>:<br>
-🏷️ <b>نام</b>: {name}<br>
-💱 <b>نماد</b>: {symbol}<br>
-💵 <b>قیمت</b>: ${safe_number(price)}<br>
-⏱️ <b>تغییر ۱ ساعته</b>: {safe_number(change_1h, "{:.2f}")}%<br>
-📊 <b>تغییر ۲۴ ساعته</b>: {safe_number(change_24h, "{:.2f}")}%<br>
-📅 <b>تغییر ۷ روزه</b>: {safe_number(change_7d, "{:.2f}")}%<br>
-📈 <b>حجم معاملات ۲۴ساعته</b>: ${safe_number(volume_24h, "{:,.0f}")}<br>
-💰 <b>ارزش کل بازار</b>: ${safe_number(market_cap, "{:,.0f}")}<br>
-🔄 <b>عرضه در گردش</b>: {safe_number(circulating_supply, "{:,.0f}")} {symbol}<br>
-🌐 <b>عرضه کل</b>: {safe_number(total_supply, "{:,.0f}")} {symbol}<br>
-🚀 <b>عرضه نهایی</b>: {safe_number(max_supply, "{:,.0f}")} {symbol}<br>
-🛒 <b>تعداد بازارها</b>: {num_pairs}<br>
+            msg = f"""🔍 <b>اطلاعات ارز</b>:\n
+🏷️ <b>نام</b>: {name}\n
+💱 <b>نماد</b>: {symbol}\n
+💵 <b>قیمت</b>: ${safe_number(price)}\n
+⏱️ <b>تغییر ۱ ساعته</b>: {safe_number(change_1h, "{:.2f}")}%\n
+📊 <b>تغییر ۲۴ ساعته</b>: {safe_number(change_24h, "{:.2f}")}%\n
+📅 <b>تغییر ۷ روزه</b>: {safe_number(change_7d, "{:.2f}")}%\n
+📈 <b>حجم معاملات ۲۴ساعته</b>: ${safe_number(volume_24h, "{:,.0f}")}\n
+💰 <b>ارزش کل بازار</b>: ${safe_number(market_cap, "{:,.0f}")}\n
+🔄 <b>عرضه در گردش</b>: {safe_number(circulating_supply, "{:,.0f}")} {symbol}\n
+🌐 <b>عرضه کل</b>: {safe_number(total_supply, "{:,.0f}")} {symbol}\n
+🚀 <b>عرضه نهایی</b>: {safe_number(max_supply, "{:,.0f}")} {symbol}\n
+🛒 <b>تعداد بازارها</b>: {num_pairs}\n
 🏅 <b>رتبه بازار</b>: #{rank}
 """
-
-            # اضافه کردن دکمه Inline
             keyboard = [[InlineKeyboardButton("📜 نمایش اطلاعات تکمیلی", callback_data=f"details_{symbol}")]]
             reply_markup = InlineKeyboardMarkup(keyboard)
             print(f"Sending coin info for {symbol} with inline button...")
@@ -138,8 +136,8 @@ async def handle_details(update: Update, context: ContextTypes.DEFAULT_TYPE):
     callback_data = query.data
     if callback_data.startswith("details_"):
         symbol = callback_data[len("details_"):]
-        msg = f"""📜 <b>اطلاعات تکمیلی ارز {symbol}</b><br><br>
-اینجا اطلاعات تکمیلی ارز {symbol} نمایش داده می‌شود.<br>
+        msg = f"""📜 <b>اطلاعات تکمیلی ارز {symbol}</b>\n\n
+اینجا اطلاعات تکمیلی ارز {symbol} نمایش داده می‌شود.\n
 برای بستن این پنجره، روی دکمه زیر کلیک کنید.
 """
         keyboard = [[InlineKeyboardButton("❌ بستن", callback_data=f"close_details_{symbol}")]]
