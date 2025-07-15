@@ -60,12 +60,12 @@ def get_user_list():
         return {}
 
 # تنظیم منوی دستورات
-async def set_bot_commands(context: ContextTypes.DEFAULT_TYPE):
+async def set_bot_commands(bot: Bot):
     commands = [
         BotCommand("start", "شروع ربات"),
         BotCommand("userlist", "نمایش لیست کاربران (فقط ادمین)")
     ]
-    await context.bot.set_my_commands(commands)
+    await bot.set_my_commands(commands)
     print("Bot commands set: /start, /userlist")
 
 # /start
@@ -244,8 +244,10 @@ if __name__ == "__main__":
         app.add_handler(CallbackQueryHandler(handle_close_details, pattern="^close_details_"))
         app.add_handler(CommandHandler("setcommands", set_bot_commands))
 
-        # تنظیم منوی دستورات با job_queue
-        app.job_queue.run_once(set_bot_commands, when=0)
+        # تنظیم منوی دستورات به‌صورت مستقیم
+        import asyncio
+        bot = Bot(token=BOT_TOKEN)
+        asyncio.run(set_bot_commands(bot))
 
         print("Bot is running...")
         app.run_polling()
