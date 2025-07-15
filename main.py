@@ -1,11 +1,14 @@
 import os
+import json
 import requests
+from datetime import datetime
 from telegram import Update, ReplyKeyboardMarkup, InlineKeyboardMarkup, InlineKeyboardButton
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes
 
-# دریافت توکن‌ها از محیط
+# دریافت توکن‌ها و ID ادمین از محیط
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 CMC_API_KEY = os.getenv("CMC_API_KEY")
+ADMIN_USER_ID = int(os.getenv("ADMIN_USER_ID", 0))  # باید تو Runflare تنظیم بشه
 
 # بررسی وجود توکن‌ها
 if not BOT_TOKEN:
@@ -14,13 +17,57 @@ if not BOT_TOKEN:
 if not CMC_API_KEY:
     print("Error: CMC_API_KEY is not set in environment variables.")
     raise ValueError("CMC_API_KEY در متغیرهای محیطی تنظیم نشده است.")
+if not ADMIN_USER_ID:
+    print("Warning: ADMIN_USER_ID is not set. User list access will be disabled.")
+
+# مسیر فایل ذخیره‌سازی کاربران
+USERS_FILE = "users.json"
 
 # تبدیل امن اعداد
 def safe_number(value, fmt="{:,.2f}"):
     return fmt.format(value) if value is not None else "نامشخص"
 
+# ذخیره کاربر در فایل JSON
+def save_user(user_id, username):
+    try:
+        # خواندن کاربران فعلی
+        try:
+            with open(USERS_FILE, "r") as f:
+                users = json.load(f)
+        except (FileNotFoundError, json.JSONDecodeError):
+            users = {}
+
+        # افزودن یا به‌روزرسانی کاربر
+        users[str(user_id)] = {
+            "username": username or "نامشخص",
+            "last_start": datetime.now().isoformat()
+        }
+
+        # ذخیره در فایل
+        with open(USERS_FILE, "w") as f:
+            json.dump(users, f, ensure_ascii=False, indent=4)
+        print(f"User {user_id} ({username}) saved to {USERS_FILE}")
+    except Exception as e:
+        print(f"Error saving user {user_id}: {e}")
+
+# دریافت لیست کاربران
+def get_user_list():
+    try:
+        with open(USERS_FILE, "r") as f:
+            users = json.load(f)
+        return users
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {}
+
 # /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user
+    user_id = user.id
+    username = user.username or user.first_name or "بدون نام"
+
+    # ذخیره کاربر
+    save_user(user_id, username)
+
     keyboard = [["📊 وضعیت کلی بازار"]]
     markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
     await update.message.reply_text(
@@ -28,6 +75,25 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parse_mode="HTML",
         reply_markup=markup
     )
+
+# /userlist (فقط برای ادمین)
+async def user_list(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    if user_id != ADMIN_USER_ID:
+        await update.message.reply_text("⚠️ دسترسی غیرمجاز! این دستور فقط برای ادمین است.")
+        return
+
+    users = get_user_list()
+    if not users:
+        await update.message.reply_text("هیچ کاربری ربات را استارت نکرده است.")
+        return
+
+    total_users = len(users)
+    msg = f"<b>تعداد کل کاربران</b>: {total_users}\n\n<b>لیست کاربران</b>:\n"
+    for uid, info in users.items():
+        msg += f"ID: {uid}, نام کاربری: {info['username']}, آخرین استارت: {info['last_start']}\n"
+
+    await update.message.reply_text(msg, parse_mode="HTML")
 
 # اطلاعات کلی بازار
 async def show_global_market(update: Update):
@@ -160,6 +226,7 @@ if __name__ == "__main__":
         print("Initializing Telegram bot...")
         app = ApplicationBuilder().token(BOT_TOKEN).build()
         app.add_handler(CommandHandler("start", start))
+        app.add_handler(CommandHandler("userlist", user_list))
         app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, crypto_info))
         app.add_handler(CallbackQueryHandler(handle_details, pattern="^details_"))
         app.add_handler(CallbackQueryHandler(handle_close_details, pattern="^close_details_"))
