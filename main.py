@@ -19,7 +19,7 @@ if not CMC_API_KEY:
     print("Error: CMC_API_KEY is not set in environment variables.")
     raise ValueError("CMC_API_KEY در متغیرهای محیطی تنظیم نشده است.")
 if not ADMIN_USER_ID:
-    print("Warning: ADMIN_USER_ID is not set. User list access will be disabled.")
+    print("Warning: ADMIN_USER_ID is not set. Settings access will be disabled.")
 
 # مسیر فایل ذخیره‌سازی کاربران
 USERS_FILE = "users.json"
@@ -64,10 +64,10 @@ def get_user_list():
 async def set_bot_commands(bot: Bot):
     commands = [
         BotCommand("start", "شروع ربات"),
-        BotCommand("userlist", "نمایش لیست کاربران (فقط ادمین)")
+        BotCommand("settings", "تنظیمات ادمین (فقط ادمین)")
     ]
     await bot.set_my_commands(commands)
-    print("Bot commands set: /start, /userlist")
+    print("Bot commands set: /start, /settings")
 
 # /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -86,27 +86,27 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=markup
     )
 
-# /userlist (فقط برای ادمین)
-async def user_list(update: Update, context: ContextTypes.DEFAULT_TYPE):
+# /settings (فقط برای ادمین)
+async def settings(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     if user_id != ADMIN_USER_ID:
         await update.message.reply_text("⚠️ دسترسی غیرمجاز! این دستور فقط برای ادمین است.")
-        print(f"Unauthorized access attempt to /userlist by user {user_id}")
+        print(f"Unauthorized access attempt to /settings by user {user_id}")
         return
 
     users = get_user_list()
     if not users:
         await update.message.reply_text("هیچ کاربری ربات را استارت نکرده است.")
-        print("No users found in user list")
+        print("No users found in settings")
         return
 
     total_users = len(users)
-    msg = f"<b>تعداد کل کاربران</b>: {total_users}\n\n<b>لیست کاربران</b>:\n"
+    msg = f"<b>تنظیمات ادمین</b>:\n\n<b>اطلاعات کاربران</b>:\n"
     for uid, info in users.items():
         msg += f"ID: {uid}, نام کاربری: {info['username']}, آخرین استارت: {info['last_start']}\n"
 
     await update.message.reply_text(msg, parse_mode="HTML")
-    print(f"User list sent to admin {user_id}")
+    print(f"Settings (user list) sent to admin {user_id}")
 
 # اطلاعات کلی بازار
 async def show_global_market(update: Update):
@@ -190,9 +190,9 @@ async def crypto_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
 📅 <b>تغییر ۷ روزه</b>: {safe_number(change_7d, "{:.2f}")}%\n
 📈 <b>حجم معاملات ۲۴ساعته</b>: ${safe_number(volume_24h, "{:,.0f}")}\n
 💰 <b>ارزش کل بازار</b>: ${safe_number(market_cap, "{:,.0f}")}\n
-🔄 <b>عرضه در گردش</b>: {safe_number(circulating_supply, "{:,.0f}")} {symbol}\n
-🌐 <b>عرضه کل</b>: {safe_number(total_supply, "{:,.0f}")} {symbol}\n
-🚀 <b>عرضه نهایی</b>: {safe_number(max_supply, "{:,.0f}")} {symbol}\n
+🔄 <b>عرضه در گردش</b>: ${safe_number(circulating_supply, "{:,.0f}")} {symbol}\n
+🌐 <b>عرضه کل</b>: ${safe_number(total_supply, "{:,.0f}")} {symbol}\n
+🚀 <b>عرضه نهایی</b>: ${safe_number(max_supply, "{:,.0f}")} {symbol}\n
 🛒 <b>تعداد بازارها</b>: {num_pairs}\n
 🏅 <b>رتبه بازار</b>: #{rank}
 """
@@ -239,7 +239,7 @@ async def main():
         print("Initializing Telegram bot...")
         app = ApplicationBuilder().token(BOT_TOKEN).build()
         app.add_handler(CommandHandler("start", start))
-        app.add_handler(CommandHandler("userlist", user_list))
+        app.add_handler(CommandHandler("settings", settings))
         app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, crypto_info))
         app.add_handler(CallbackQueryHandler(handle_details, pattern="^details_"))
         app.add_handler(CallbackQueryHandler(handle_close_details, pattern="^close_details_"))
