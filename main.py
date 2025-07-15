@@ -243,9 +243,10 @@ if __name__ == "__main__":
         app.add_handler(CallbackQueryHandler(handle_details, pattern="^details_"))
         app.add_handler(CallbackQueryHandler(handle_close_details, pattern="^close_details_"))
 
-        # تنظیم منوی دستورات هنگام شروع ربات
-        app.add_handler(CommandHandler("setcommands", lambda update, context: set_bot_commands(context.bot)))
-        app.job_queue.run_once(lambda context: set_bot_commands(context.bot), 0)
+        # تنظیم منوی دستورات به‌صورت مستقیم
+        bot = Bot(token=BOT_TOKEN)
+        import asyncio
+        asyncio.run(set_bot_commands(bot))
 
         print("Bot is running...")
         app.run_polling()
