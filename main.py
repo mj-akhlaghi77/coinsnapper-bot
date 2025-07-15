@@ -15,7 +15,7 @@ if not CMC_API_KEY:
     print("Error: CMC_API_KEY is not set in environment variables.")
     raise ValueError("CMC_API_KEY در متغیرهای محیطی تنظیم نشده است.")
 
-# 🔧 تبدیل امن اعداد (برای جلوگیری از ارور NoneType)
+# تبدیل امن اعداد
 def safe_number(value, fmt="{:,.2f}"):
     return fmt.format(value) if value is not None else "نامشخص"
 
@@ -24,17 +24,15 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     keyboard = [["📊 وضعیت کلی بازار"]]
     markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
     await update.message.reply_text(
-        "سلام! 👋\nنام یا نماد یک ارز دیجیتال رو بفرست یا از منوی زیر استفاده کن:",
+        "سلام! 👋<br>نام یا نماد یک ارز دیجیتال رو بفرست یا از منوی زیر استفاده کن:",
+        parse_mode="HTML",
         reply_markup=markup
     )
 
 # اطلاعات کلی بازار
 async def show_global_market(update: Update):
     url = "https://pro-api.coinmarketcap.com/v1/global-metrics/quotes/latest"
-    headers = {
-        "Accepts": "application/json",
-        "X-CMC_PRO_API_KEY": CMC_API_KEY,
-    }
+    headers = {"Accepts": "application/json", "X-CMC_PRO_API_KEY": CMC_API_KEY}
 
     try:
         print("Sending request to CoinMarketCap API for global market data...")
@@ -50,12 +48,12 @@ async def show_global_market(update: Update):
         total_volume_24h = data["data"]["quote"]["USD"]["total_volume_24h"]
         btc_dominance = data["data"]["btc_dominance"]
 
-        msg = f"""🌐 *وضعیت کلی بازار کریپتو*:
-💰 *ارزش کل بازار*: ${safe_number(total_market_cap, "{:,.0f}")}
-📊 *حجم معاملات ۲۴ساعته*: ${safe_number(total_volume_24h, "{:,.0f}")}
-🟠 *دامیننس بیت‌کوین*: {safe_number(btc_dominance, "{:.2f}")}%"""
-
-        await update.message.reply_text(msg, parse_mode="MarkdownV2")
+        msg = f"""🌐 <b>وضعیت کلی بازار کریپتو</b>:<br>
+💰 <b>ارزش کل بازار</b>: ${safe_number(total_market_cap, "{:,.0f}")}<br>
+📊 <b>حجم معاملات ۲۴ساعته</b>: ${safe_number(total_volume_24h, "{:,.0f}")}<br>
+🟠 <b>دامیننس بیت‌کوین</b>: {safe_number(btc_dominance, "{:.2f}")}%
+"""
+        await update.message.reply_text(msg, parse_mode="HTML")
 
     except (requests.RequestException, ValueError) as e:
         print(f"Global market error: {e}")
@@ -70,10 +68,7 @@ async def crypto_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     url = "https://pro-api.coinmarketcap.com/v1/cryptocurrency/listings/latest"
-    headers = {
-        "Accepts": "application/json",
-        "X-CMC_PRO_API_KEY": CMC_API_KEY,
-    }
+    headers = {"Accepts": "application/json", "X-CMC_PRO_API_KEY": CMC_API_KEY}
     params = {"start": 1, "limit": 5000, "convert": "USD"}
 
     try:
@@ -88,9 +83,7 @@ async def crypto_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         result = None
         for coin in data["data"]:
-            name_match = coin["name"].lower() == query
-            symbol_match = coin["symbol"].lower() == query
-            if name_match or symbol_match:
+            if coin["name"].lower() == query or coin["symbol"].lower() == query:
                 result = coin
                 break
 
@@ -109,27 +102,27 @@ async def crypto_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
             num_pairs = result["num_market_pairs"]
             rank = result["cmc_rank"]
 
-            # فرمت‌بندی پیام با MarkdownV2 (اسکیپ کردن کاراکترهای خاص)
-            msg = f"""🔍 *اطلاعات ارز*:
-🏷️ *نام*: {name.replace('-', '\\-').replace('.', '\\.')}
-💱 *نماد*: {symbol.replace('-', '\\-').replace('.', '\\.')}
-💵 *قیمت*: ${safe_number(price).replace(',', '\\,')}
-⏱️ *تغییر ۱ ساعته*: {safe_number(change_1h, "{:.2f}").replace('-', '\\-').replace('.', '\\.')}%
-📊 *تغییر ۲۴ ساعته*: {safe_number(change_24h, "{:.2f}").replace('-', '\\-').replace('.', '\\.')}%
-📅 *تغییر ۷ روزه*: {safe_number(change_7d, "{:.2f}").replace('-', '\\-').replace('.', '\\.')}%
-📈 *حجم معاملات ۲۴ساعته*: ${safe_number(volume_24h, "{:,.0f}").replace(',', '\\,')}
-💰 *ارزش کل بازار*: ${safe_number(market_cap, "{:,.0f}").replace(',', '\\,')}
-🔄 *عرضه در گردش*: {safe_number(circulating_supply, "{:,.0f}").replace(',', '\\,')} {symbol.replace('-', '\\-').replace('.', '\\.')}
-🌐 *عرضه کل*: {safe_number(total_supply, "{:,.0f}").replace(',', '\\,')} {symbol.replace('-', '\\-').replace('.', '\\.')}
-🚀 *عرضه نهایی*: {safe_number(max_supply, "{:,.0f}").replace(',', '\\,')} {symbol.replace('-', '\\-').replace('.', '\\.')}
-🛒 *تعداد بازارها*: {num_pairs}
-🏅 *رتبه بازار*: #{rank}"""
+            msg = f"""🔍 <b>اطلاعات ارز</b>:<br>
+🏷️ <b>نام</b>: {name}<br>
+💱 <b>نماد</b>: {symbol}<br>
+💵 <b>قیمت</b>: ${safe_number(price)}<br>
+⏱️ <b>تغییر ۱ ساعته</b>: {safe_number(change_1h, "{:.2f}")}%<br>
+📊 <b>تغییر ۲۴ ساعته</b>: {safe_number(change_24h, "{:.2f}")}%<br>
+📅 <b>تغییر ۷ روزه</b>: {safe_number(change_7d, "{:.2f}")}%<br>
+📈 <b>حجم معاملات ۲۴ساعته</b>: ${safe_number(volume_24h, "{:,.0f}")}<br>
+💰 <b>ارزش کل بازار</b>: ${safe_number(market_cap, "{:,.0f}")}<br>
+🔄 <b>عرضه در گردش</b>: {safe_number(circulating_supply, "{:,.0f}")} {symbol}<br>
+🌐 <b>عرضه کل</b>: {safe_number(total_supply, "{:,.0f}")} {symbol}<br>
+🚀 <b>عرضه نهایی</b>: {safe_number(max_supply, "{:,.0f}")} {symbol}<br>
+🛒 <b>تعداد بازارها</b>: {num_pairs}<br>
+🏅 <b>رتبه بازار</b>: #{rank}
+"""
 
             # اضافه کردن دکمه Inline
             keyboard = [[InlineKeyboardButton("📜 نمایش اطلاعات تکمیلی", callback_data=f"details_{symbol}")]]
             reply_markup = InlineKeyboardMarkup(keyboard)
             print(f"Sending coin info for {symbol} with inline button...")
-            await update.message.reply_text(msg, parse_mode="MarkdownV2", reply_markup=reply_markup)
+            await update.message.reply_text(msg, parse_mode="HTML", reply_markup=reply_markup)
         else:
             await update.message.reply_text("❌ ارز مورد نظر پیدا نشد. لطفاً نام یا نماد دقیق وارد کنید.")
 
@@ -140,32 +133,26 @@ async def crypto_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # پردازش کلیک روی دکمه Inline
 async def handle_details(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    await query.answer()  # تأیید دریافت کلیک
+    await query.answer()
 
-    # استخراج نماد ارز از callback_data
     callback_data = query.data
     if callback_data.startswith("details_"):
-        symbol = callback_data[len("details_"):]  # استخراج نماد ارز (مثل BTC)
-
-        # پیام با قالب‌بندی زیبا برای شبیه‌سازی دیالوگ
-        msg = f"📜 *اطلاعات تکمیلی ارز {symbol.replace('-', '\\-').replace('.', '\\.')}*\n\n" \
-              f"اینجا اطلاعات تکمیلی ارز {symbol.replace('-', '\\-').replace('.', '\\.')} نمایش داده می‌شود\\.\n" \
-              f"برای بستن این پنجره، روی دکمه زیر کلیک کنید\\."
-
-        # اضافه کردن دکمه "بستن"
+        symbol = callback_data[len("details_"):]
+        msg = f"""📜 <b>اطلاعات تکمیلی ارز {symbol}</b><br><br>
+اینجا اطلاعات تکمیلی ارز {symbol} نمایش داده می‌شود.<br>
+برای بستن این پنجره، روی دکمه زیر کلیک کنید.
+"""
         keyboard = [[InlineKeyboardButton("❌ بستن", callback_data=f"close_details_{symbol}")]]
         reply_markup = InlineKeyboardMarkup(keyboard)
         print(f"Sending dialog-like message for {symbol}...")
-        await query.message.reply_text(msg, parse_mode="MarkdownV2", reply_markup=reply_markup)
+        await query.message.reply_text(msg, parse_mode="HTML", reply_markup=reply_markup)
     else:
         await query.message.reply_text("⚠️ خطا: درخواست نامعتبر.")
 
 # پردازش دکمه "بستن"
 async def handle_close_details(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    await query.answer()  # تأیید دریافت کلیک
-
-    # حذف پیام دیالوگ
+    await query.answer()
     print("Closing dialog message...")
     await query.message.delete()
 
@@ -178,7 +165,6 @@ if __name__ == "__main__":
         app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, crypto_info))
         app.add_handler(CallbackQueryHandler(handle_details, pattern="^details_"))
         app.add_handler(CallbackQueryHandler(handle_close_details, pattern="^close_details_"))
-
         print("Bot is running...")
         app.run_polling()
     except Exception as e:
