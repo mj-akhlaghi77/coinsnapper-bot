@@ -2,7 +2,7 @@ import os
 import json
 import requests
 from datetime import datetime
-from telegram import Update, ReplyKeyboardMarkup, InlineKeyboardMarkup, InlineKeyboardButton
+from telegram import Update, ReplyKeyboardMarkup, InlineKeyboardMarkup, InlineKeyboardButton, Bot, BotCommand
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes
 
 # دریافت توکن‌ها و ID ادمین از محیط
@@ -59,6 +59,15 @@ def get_user_list():
     except (FileNotFoundError, json.JSONDecodeError):
         return {}
 
+# تنظیم منوی دستورات
+async def set_bot_commands(bot: Bot):
+    commands = [
+        BotCommand("start", "شروع ربات"),
+        BotCommand("userlist", "نمایش لیست کاربران (فقط ادمین)")
+    ]
+    await bot.set_my_commands(commands)
+    print("Bot commands set: /start, /userlist")
+
 # /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
@@ -81,11 +90,13 @@ async def user_list(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     if user_id != ADMIN_USER_ID:
         await update.message.reply_text("⚠️ دسترسی غیرمجاز! این دستور فقط برای ادمین است.")
+        print(f"Unauthorized access attempt to /userlist by user {user_id}")
         return
 
     users = get_user_list()
     if not users:
         await update.message.reply_text("هیچ کاربری ربات را استارت نکرده است.")
+        print("No users found in user list")
         return
 
     total_users = len(users)
@@ -94,6 +105,7 @@ async def user_list(update: Update, context: ContextTypes.DEFAULT_TYPE):
         msg += f"ID: {uid}, نام کاربری: {info['username']}, آخرین استارت: {info['last_start']}\n"
 
     await update.message.reply_text(msg, parse_mode="HTML")
+    print(f"User list sent to admin {user_id}")
 
 # اطلاعات کلی بازار
 async def show_global_market(update: Update):
@@ -230,6 +242,11 @@ if __name__ == "__main__":
         app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, crypto_info))
         app.add_handler(CallbackQueryHandler(handle_details, pattern="^details_"))
         app.add_handler(CallbackQueryHandler(handle_close_details, pattern="^close_details_"))
+
+        # تنظیم منوی دستورات هنگام شروع ربات
+        app.add_handler(CommandHandler("setcommands", lambda update, context: set_bot_commands(context.bot)))
+        app.job_queue.run_once(lambda context: set_bot_commands(context.bot), 0)
+
         print("Bot is running...")
         app.run_polling()
     except Exception as e:
