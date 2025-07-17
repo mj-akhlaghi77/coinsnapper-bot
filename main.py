@@ -15,7 +15,7 @@ if not BOT_TOKEN:
 if not CMC_API_KEY:
     raise ValueError("CMC_API_KEY در متغیرهای محیطی تنظیم نشده است.")
 
-# به جای فایل، از یه دیکشنری موقت برای ذخیره کاربران استفاده می‌کنیم
+# دیکشنری موقت برای ذخیره کاربران
 USERS = {}
 
 def safe_number(value, fmt="{:,.2f}"):
@@ -56,6 +56,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             parse_mode="HTML",
             reply_markup=markup
         )
+        print(f"پیام شروع برای کاربر {user.id} ارسال شد.")
     except Exception as e:
         print(f"خطا در ارسال پیام شروع: {e}")
 
@@ -76,6 +77,7 @@ async def settings(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     try:
         await update.message.reply_text(msg, parse_mode="HTML")
+        print("تنظیمات ادمین ارسال شد.")
     except Exception as e:
         print(f"خطا در ارسال تنظیمات: {e}")
 
@@ -93,6 +95,7 @@ async def show_global_market(update: Update):
 📊 <b>حجم معاملات ۲۴ساعته</b>: ${safe_number(data['quote']['USD']['total_volume_24h'], "{:,.0f}")}\n
 🟠 <b>دامیننس بیت‌کوین</b>: {safe_number(data['btc_dominance'], "{:.2f}")}%"""
         await update.message.reply_text(msg, parse_mode="HTML")
+        print("اطلاعات بازار ارسال شد.")
     except Exception as e:
         print(f"خطا در دریافت اطلاعات بازار: {e}")
         await update.message.reply_text("⚠️ خطا در دریافت اطلاعات کلی بازار.")
@@ -136,6 +139,7 @@ async def crypto_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         keyboard = [[InlineKeyboardButton("📜 نمایش اطلاعات تکمیلی", callback_data=f"details_{coin['symbol']}")]]
         await update.message.reply_text(msg, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(keyboard))
+        print(f"اطلاعات ارز {coin['symbol']} ارسال شد.")
     except Exception as e:
         print(f"خطا در دریافت اطلاعات ارز: {e}")
         await update.message.reply_text("⚠️ خطا در دریافت اطلاعات ارز.")
@@ -185,6 +189,7 @@ async def handle_details(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         keyboard = [[InlineKeyboardButton("❌ بستن", callback_data=f"close_details_{symbol}")]]
         await query.message.reply_text(msg, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(keyboard), disable_web_page_preview=True)
+        print(f"اطلاعات تکمیلی برای {symbol} ارسال شد.")
     except Exception as e:
         print(f"خطا در دریافت اطلاعات تکمیلی: {e}")
         await query.message.reply_text("⚠️ خطا در دریافت اطلاعات تکمیلی.")
@@ -194,6 +199,7 @@ async def handle_close_details(update: Update, context: ContextTypes.DEFAULT_TYP
     try:
         await query.answer()
         await query.message.delete()
+        print("پیام جزئیات بسته شد.")
     except Exception as e:
         print(f"خطا در بستن جزئیات: {e}")
 
@@ -218,8 +224,9 @@ async def main():
         await app.run_polling()
     except Exception as e:
         print(f"خطا در اجرای ربات: {e}")
+        raise
     finally:
-        # Ensure proper shutdown
+        # Ensure proper shutdown without closing the loop
         try:
             await app.shutdown()
             print("اپلیکیشن خاموش شد.")
@@ -228,23 +235,28 @@ async def main():
 
 if __name__ == "__main__":
     try:
-        # Try to get the running event loop
+        # Try to get the running event loop (for serverless environments)
         loop = asyncio.get_running_loop()
         # Schedule the main coroutine as a task
         loop.create_task(main())
         print("ربات به صورت task در loop فعلی اجرا شد.")
-    except RuntimeError:
-        # If no running loop exists, create a new one
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        try:
-            loop.run_until_complete(main())
-        except Exception as e:
-            print(f"خطا در اجرای loop جدید: {e}")
-        finally:
+    except RuntimeError as e:
+        if "no running event loop" in str(e).lower():
+            # If no running loop exists, create a new one
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
             try:
-                loop.run_until_complete(loop.shutdown_asyncgens())
-                loop.close()
-                print("Loop بسته شد.")
+                loop.run_until_complete(main())
             except Exception as e:
-                print(f"خطا در بستن loop: {e}")
+                print(f"خطا در اجرای loop جدید: {e}")
+            finally:
+                # Only close the loop if we created it
+                try:
+                    loop.run_until_complete(loop.shutdown_asyncgens())
+                    loop.close()
+                    print("Loop بسته شد.")
+                except Exception as e:
+                    print(f"خطا در بستن loop: {e}")
+        else:
+            print(f"خطای غیرمنتظره در دسترسی به loop: {e}")
+            raise
