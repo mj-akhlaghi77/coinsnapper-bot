@@ -166,17 +166,22 @@ async def handle_details(update: Update, context: ContextTypes.DEFAULT_TYPE):
         explorer_links = "
 ".join([f"🔗 {link}" for link in explorers[:3]]) if explorers else "🔍 در دسترس نیست."
         whitepaper = data.get("urls", {}).get("technical_doc", [])
-        whitepaper_link = whitepaper[0] if whitepaper else None"🔍 در دسترس نیست."
+        whitepaper_link = whitepaper[0] if whitepaper else None
+        date_added = data.get("date_added", "نامشخص")
+        tags = ", ".join(data.get("tags", [])[:5]) or "ندارد"
+        platform = data.get("platform", {}).get("name", "ندارد")
+
+        whitepaper_text = f"<a href=\"{whitepaper_link}\">{whitepaper_link}</a>" if whitepaper_link else "موجود نیست"
 
         msg = f"""📜 <b>اطلاعات تکمیلی درباره {symbol}</b>
 
 📂 <b>دسته‌بندی</b>: {category}
 🌐 <b>وب‌سایت رسمی</b>: <a href=\"{website}\">{website}</a>
 🧾 <b>توضیحات</b>: {description[:1000]}...
-📆 <b>تاریخ اضافه شدن</b>: {data.get('date_added', 'نامشخص')}
-🏷 <b>برچسب‌ها</b>: {', '.join(data.get('tags', [])[:5]) or 'ندارد'}
-⚙️ <b>پلتفرم</b>: {data.get('platform', {}).get('name', 'ندارد')}
-📘 <b>وایت‌پیپر</b>: <a href=\"{whitepaper_link}\">{whitepaper_link}</a>" if whitepaper_link else "📘 <b>وایت‌پیپر</b>: موجود نیست"
+📆 <b>تاریخ اضافه شدن</b>: {date_added}
+🏷 <b>برچسب‌ها</b>: {tags}
+⚙️ <b>پلتفرم</b>: {platform}
+📘 <b>وایت‌پیپر</b>: {whitepaper_text}
 🛰 <b>اکسپلوررها</b>:
 {explorer_links}"""
 
@@ -184,6 +189,7 @@ async def handle_details(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.message.reply_text(msg, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(keyboard), disable_web_page_preview=True)
 
     except Exception as e:
+        print(f"Error fetching details: {e}")
         await query.message.reply_text("⚠️ خطا در دریافت اطلاعات تکمیلی.")
 
 async def handle_close_details(update: Update, context: ContextTypes.DEFAULT_TYPE):
