@@ -2,6 +2,7 @@ import os
 import json
 import requests
 import asyncio
+import aiohttp
 from datetime import datetime
 from telegram import Update, ReplyKeyboardMarkup, InlineKeyboardMarkup, InlineKeyboardButton, Bot, BotCommand
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes
@@ -85,20 +86,22 @@ async def show_global_market(update: Update):
     url = "https://pro-api.coinmarketcap.com/v1/global-metrics/quotes/latest"
     headers = {"Accepts": "application/json", "X-CMC_PRO_API_KEY": CMC_API_KEY}
 
-    try:
-        response = requests.get(url, headers=headers)
-        response.raise_for_status()
-        data = response.json()["data"]
+    async with aiohttp.ClientSession() as session:
+        try:
+            async with session.get(url, headers=headers, timeout=10) as response:
+                response.raise_for_status()
+                data = await response.json()
+                data = data["data"]
 
-        msg = f"""\U0001F310 <b>وضعیت کلی بازار کریپتو</b>:\n
+                msg = f"""\U0001F310 <b>وضعیت کلی بازار کریپتو</b>:\n
 💰 <b>ارزش کل بازار</b>: ${safe_number(data['quote']['USD']['total_market_cap'], "{:,.0f}")}\n
 📊 <b>حجم معاملات ۲۴ساعته</b>: ${safe_number(data['quote']['USD']['total_volume_24h'], "{:,.0f}")}\n
 🟠 <b>دامیننس بیت‌کوین</b>: {safe_number(data['btc_dominance'], "{:.2f}")}%"""
-        await update.message.reply_text(msg, parse_mode="HTML")
-        print("اطلاعات بازار ارسال شد.")
-    except Exception as e:
-        print(f"خطا در دریافت اطلاعات بازار: {e}")
-        await update.message.reply_text("⚠️ خطا در دریافت اطلاعات کلی بازار.")
+                await update.message.reply_text(msg, parse_mode="HTML")
+                print("اطلاعات بازار ارسال شد.")
+        except Exception as e:
+            print(f"خطا در دریافت اطلاعات بازار: {e}")
+            await update.message.reply_text("⚠️ خطا در دریافت اطلاعات کلی بازار.")
 
 async def crypto_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.message.text.strip().lower()
@@ -111,17 +114,18 @@ async def crypto_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
     headers = {"Accepts": "application/json", "X-CMC_PRO_API_KEY": CMC_API_KEY}
     params = {"start": 1, "limit": 5000, "convert": "USD"}
 
-    try:
-        response = requests.get(url, headers=headers, params=params)
-        response.raise_for_status()
-        coins = response.json()["data"]
+    async with aiohttp.ClientSession() as session:
+        try:
+            async with session.get(url, headers=headers, params=params, timeout=10) as response:
+                response.raise_for_status()
+                coins = (await response.json())["data"]
 
-        coin = next((c for c in coins if c["name"].lower() == query or c["symbol"].lower() == query), None)
-        if not coin:
-            await update.message.reply_text("❌ ارز مورد نظر پیدا نشد. لطفاً نام یا نماد دقیق وارد کنید.")
-            return
+                coin = next((c for c in coins if c["name"].lower() == query or c["symbol"].lower() == query), None)
+                if not coin:
+                    await update.message.reply_text("❌ ارز مورد نظر پیدا نشد. لطفاً نام یا نماد دقیق وارد کنید.")
+                    return
 
-        msg = f"""🔍 <b>اطلاعات ارز</b>:
+                msg = f"""🔍 <b>اطلاعات ارز</b>:
 
 🏷️ <b>نام</b>: {coin['name']}\n
 💱 <b>نماد</b>: {coin['symbol']}\n
@@ -137,12 +141,12 @@ async def crypto_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
 🛒 <b>تعداد بازارها</b>: {coin['num_market_pairs']}\n
 🏅 <b>رتبه بازار</b>: #{coin['cmc_rank']}"""
 
-        keyboard = [[InlineKeyboardButton("📜 نمایش اطلاعات تکمیلی", callback_data=f"details_{coin['symbol']}")]]
-        await update.message.reply_text(msg, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(keyboard))
-        print(f"اطلاعات ارز {coin['symbol']} ارسال شد.")
-    except Exception as e:
-        print(f"خطا در دریافت اطلاعات ارز: {e}")
-        await update.message.reply_text("⚠️ خطا در دریافت اطلاعات ارز.")
+                keyboard = [[InlineKeyboardButton("📜 نمایش اطلاعات تکمیلی", callback_data=f"details_{coin['symbol']}")]]
+                await update.message.reply_text(msg, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(keyboard))
+                print(f"اطلاعات ارز {coin['symbol']} ارسال شد.")
+        except Exception as e:
+            print(f"خطا در دریافت اطلاعات ارز: {e}")
+            await update.message.reply_text("⚠️ خطا در دریافت اطلاعات ارز.")
 
 async def handle_details(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -153,29 +157,30 @@ async def handle_details(update: Update, context: ContextTypes.DEFAULT_TYPE):
     headers = {"Accepts": "application/json", "X-CMC_PRO_API_KEY": CMC_API_KEY}
     params = {"symbol": symbol}
 
-    try:
-        response = requests.get(url, headers=headers, params=params)
-        response.raise_for_status()
-        data = response.json()["data"].get(symbol)
+    async with aiohttp.ClientSession() as session:
+        try:
+            async with session.get(url, headers=headers, params=params, timeout=10) as response:
+                response.raise_for_status()
+                data = (await response.json())["data"].get(symbol)
 
-        if not data:
-            await query.message.reply_text("⚠️ اطلاعاتی برای این ارز پیدا نشد.")
-            return
+                if not data:
+                    await query.message.reply_text("⚠️ اطلاعاتی برای این ارز پیدا نشد.")
+                    return
 
-        description = data.get("description", "توضیحی موجود نیست.")
-        category = data.get("category", "نامشخص")
-        website = data.get("urls", {}).get("website", [""])[0]
-        explorers = data.get("urls", {}).get("explorer", [])
-        explorer_links = "\n".join([f"🔗 {link}" for link in explorers[:3]]) if explorers else "🔍 در دسترس نیست."
-        whitepaper = data.get("urls", {}).get("technical_doc", [])
-        whitepaper_link = whitepaper[0] if whitepaper else None
-        date_added = data.get("date_added", "نامشخص")
-        tags = ", ".join(data.get("tags", [])[:5]) or "ندارد"
-        platform = data.get("platform", {}).get("name", "ندارد")
+                description = data.get("description", "توضیحی موجود نیست.")
+                category = data.get("category", "نامشخص")
+                website = data.get("urls", {}).get("website", [""])[0]
+                explorers = data.get("urls", {}).get("explorer", [])
+                explorer_links = "\n".join([f"🔗 {link}" for link in explorers[:3]]) if explorers else "🔍 در دسترس نیست."
+                whitepaper = data.get("urls", {}).get("technical_doc", [])
+                whitepaper_link = whitepaper[0] if whitepaper else None
+                date_added = data.get("date_added", "نامشخص")
+                tags = ", ".join(data.get("tags", [])[:5]) or "ندارد"
+                platform = data.get("platform", {}).get("name", "ندارد")
 
-        whitepaper_text = f"<a href=\"{whitepaper_link}\">{whitepaper_link}</a>" if whitepaper_link else "موجود نیست"
+                whitepaper_text = f"<a href=\"{whitepaper_link}\">{whitepaper_link}</a>" if whitepaper_link else "موجود نیست"
 
-        msg = f"""📜 <b>اطلاعات تکمیلی درباره {symbol}</b>
+                msg = f"""📜 <b>اطلاعات تکمیلی درباره {symbol}</b>
 
 📂 <b>دسته‌بندی</b>: {category}
 🌐 <b>وب‌سایت رسمی</b>: <a href=\"{website}\">{website}</a>
@@ -184,15 +189,15 @@ async def handle_details(update: Update, context: ContextTypes.DEFAULT_TYPE):
 🏷 <b>برچسب‌ها</b>: {tags}
 ⚙️ <b>پلتفرم</b>: {platform}
 📘 <b>وایت‌پیپر</b>: {whitepaper_text}
-🛰 <b>اکسپلوررها</b>:
+�satellite <b>اکسپلوررها</b>:
 {explorer_links}"""
 
-        keyboard = [[InlineKeyboardButton("❌ بستن", callback_data=f"close_details_{symbol}")]]
-        await query.message.reply_text(msg, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(keyboard), disable_web_page_preview=True)
-        print(f"اطلاعات تکمیلی برای {symbol} ارسال شد.")
-    except Exception as e:
-        print(f"خطا در دریافت اطلاعات تکمیلی: {e}")
-        await query.message.reply_text("⚠️ خطا در دریافت اطلاعات تکمیلی.")
+                keyboard = [[InlineKeyboardButton("❌ بستن", callback_data=f"close_details_{symbol}")]]
+                await query.message.reply_text(msg, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(keyboard), disable_web_page_preview=True)
+                print(f"اطلاعات تکمیلی برای {symbol} ارسال شد.")
+        except Exception as e:
+            print(f"خطا در دریافت اطلاعات تکمیلی: {e}")
+            await query.message.reply_text("⚠️ خطا در دریافت اطلاعات تکمیلی.")
 
 async def handle_close_details(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -215,15 +220,16 @@ async def main():
 
     try:
         # Initialize the application
+        print("شروع اولیه‌سازی اپلیکیشن...")
         await app.initialize()
         print("اپلیکیشن اولیه‌سازی شد.")
         # Set bot commands
         await set_bot_commands(app.bot)
         # Start polling
         print("ربات در حال اجرا...")
-        # Run polling with error handling
         try:
-            await app.run_polling(poll_interval=1.0, timeout=10)
+            await app.run_polling(poll_interval=1.0, timeout=10, drop_pending_updates=True)
+            print("Polling با موفقیت اجرا شد.")
         except Exception as e:
             print(f"خطا در polling: {e}")
             raise
@@ -233,6 +239,7 @@ async def main():
     finally:
         # Ensure proper shutdown without closing the loop
         try:
+            print("شروع خاموش کردن اپلیکیشن...")
             await app.shutdown()
             print("اپلیکیشن خاموش شد.")
         except Exception as e:
@@ -240,7 +247,7 @@ async def main():
 
 if __name__ == "__main__":
     try:
-        # Try to get the running event loop (for serverless environments like Runflare/Cloudflare)
+        # Try to get the running event loop (for serverless environments like Runflare)
         loop = asyncio.get_running_loop()
         # Schedule the main coroutine as a task
         loop.create_task(main())
@@ -251,7 +258,9 @@ if __name__ == "__main__":
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
             try:
+                print("اجرای ربات در loop جدید...")
                 loop.run_until_complete(main())
+                print("اجرای loop جدید کامل شد.")
             except Exception as e:
                 print(f"خطا در اجرای loop جدید: {e}")
             finally:
@@ -264,6 +273,6 @@ if __name__ == "__main__":
                     print(f"خطا در بستن loop: {e}")
         else:
             print(f"خطای غیرمنتظره در دسترسی به loop: {e}")
-            # In serverless, we don't raise; just log and continue
+            # In serverless, we don't raise; just schedule the task
             loop.create_task(main())
             print("ربات به صورت task در loop فعلی اجرا شد (تلاش دوم).")
