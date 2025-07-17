@@ -15,53 +15,49 @@ if not BOT_TOKEN:
 if not CMC_API_KEY:
     raise ValueError("CMC_API_KEY در متغیرهای محیطی تنظیم نشده است.")
 
-USERS_FILE = "users.json"
+# به جای فایل، از یه دیکشنری موقت برای ذخیره کاربران استفاده می‌کنیم
+USERS = {}
 
 def safe_number(value, fmt="{:,.2f}"):
     return fmt.format(value) if value is not None else "نامشخص"
 
 def save_user(user_id, username):
     try:
-        try:
-            with open(USERS_FILE, "r") as f:
-                users = json.load(f)
-        except (FileNotFoundError, json.JSONDecodeError):
-            users = {}
-
-        users[str(user_id)] = {
+        USERS[str(user_id)] = {
             "username": username or "نامشخص",
             "last_start": datetime.now().isoformat()
         }
-
-        with open(USERS_FILE, "w") as f:
-            json.dump(users, f, ensure_ascii=False, indent=4)
+        print(f"کاربر {user_id} ذخیره شد.")
     except Exception as e:
-        print(f"Error saving user {user_id}: {e}")
+        print(f"خطا در ذخیره کاربر {user_id}: {e}")
 
 def get_user_list():
-    try:
-        with open(USERS_FILE, "r") as f:
-            return json.load(f)
-    except (FileNotFoundError, json.JSONDecodeError):
-        return {}
+    return USERS
 
 async def set_bot_commands(bot: Bot):
     commands = [
         BotCommand("start", "شروع ربات"),
         BotCommand("settings", "تنظیمات ادمین (فقط ادمین)")
     ]
-    await bot.set_my_commands(commands)
+    try:
+        await bot.set_my_commands(commands)
+        print("دستورات ربات تنظیم شد.")
+    except Exception as e:
+        print(f"خطا در تنظیم دستورات ربات: {e}")
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     save_user(user.id, user.username or user.first_name or "بدون نام")
     keyboard = [["\U0001F4CA وضعیت کلی بازار"]]
     markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
-    await update.message.reply_text(
-        "سلام! \U0001F44B\nنام یا نماد یک ارز دیجیتال رو بفرست یا از منوی زیر استفاده کن:",
-        parse_mode="HTML",
-        reply_markup=markup
-    )
+    try:
+        await update.message.reply_text(
+            "سلام! \U0001F44B\nنام یا نماد یک ارز دیجیتال رو بفرست یا از منوی زیر استفاده کن:",
+            parse_mode="HTML",
+            reply_markup=markup
+        )
+    except Exception as e:
+        print(f"خطا در ارسال پیام شروع: {e}")
 
 async def settings(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
@@ -78,7 +74,10 @@ async def settings(update: Update, context: ContextTypes.DEFAULT_TYPE):
     for uid, info in users.items():
         msg += f"ID: {uid}, نام کاربری: {info['username']}, آخرین استارت: {info['last_start']}\n"
 
-    await update.message.reply_text(msg, parse_mode="HTML")
+    try:
+        await update.message.reply_text(msg, parse_mode="HTML")
+    except Exception as e:
+        print(f"خطا در ارسال تنظیمات: {e}")
 
 async def show_global_market(update: Update):
     url = "https://pro-api.coinmarketcap.com/v1/global-metrics/quotes/latest"
@@ -94,8 +93,8 @@ async def show_global_market(update: Update):
 📊 <b>حجم معاملات ۲۴ساعته</b>: ${safe_number(data['quote']['USD']['total_volume_24h'], "{:,.0f}")}\n
 🟠 <b>دامیننس بیت‌کوین</b>: {safe_number(data['btc_dominance'], "{:.2f}")}%"""
         await update.message.reply_text(msg, parse_mode="HTML")
-
     except Exception as e:
+        print(f"خطا در دریافت اطلاعات بازار: {e}")
         await update.message.reply_text("⚠️ خطا در دریافت اطلاعات کلی بازار.")
 
 async def crypto_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -137,8 +136,8 @@ async def crypto_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         keyboard = [[InlineKeyboardButton("📜 نمایش اطلاعات تکمیلی", callback_data=f"details_{coin['symbol']}")]]
         await update.message.reply_text(msg, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(keyboard))
-
     except Exception as e:
+        print(f"خطا در دریافت اطلاعات ارز: {e}")
         await update.message.reply_text("⚠️ خطا در دریافت اطلاعات ارز.")
 
 async def handle_details(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -186,15 +185,17 @@ async def handle_details(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         keyboard = [[InlineKeyboardButton("❌ بستن", callback_data=f"close_details_{symbol}")]]
         await query.message.reply_text(msg, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(keyboard), disable_web_page_preview=True)
-
     except Exception as e:
-        print(f"Error fetching details: {e}")
+        print(f"خطا در دریافت اطلاعات تکمیلی: {e}")
         await query.message.reply_text("⚠️ خطا در دریافت اطلاعات تکمیلی.")
 
 async def handle_close_details(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    await query.answer()
-    await query.message.delete()
+    try:
+        await query.answer()
+        await query.message.delete()
+    except Exception as e:
+        print(f"خطا در بستن جزئیات: {e}")
 
 async def main():
     app = ApplicationBuilder().token(BOT_TOKEN).build()
@@ -206,34 +207,44 @@ async def main():
     app.add_handler(CallbackQueryHandler(handle_close_details, pattern="^close_details_"))
     app.add_handler(CommandHandler("setcommands", set_bot_commands))
 
-    # Get the current event loop or create a new one if none exists
-    loop = asyncio.get_event_loop()
     try:
-        if loop.is_running():
-            # If loop is already running, create a new task
-            await app.initialize()
-            await set_bot_commands(app.bot)
-            print("Bot is running...")
-            await app.run_polling()
-            await app.shutdown()
-        else:
-            # If no loop is running, use run_until_complete
-            loop.run_until_complete(app.initialize())
-            await set_bot_commands(app.bot)
-            print("Bot is running...")
-            loop.run_until_complete(app.run_polling())
-            loop.run_until_complete(app.shutdown())
+        # Initialize the application
+        await app.initialize()
+        print("اپلیکیشن اولیه‌سازی شد.")
+        # Set bot commands
+        await set_bot_commands(app.bot)
+        # Start polling
+        print("ربات در حال اجرا...")
+        await app.run_polling()
+    except Exception as e:
+        print(f"خطا در اجرای ربات: {e}")
     finally:
-        if not loop.is_running():
-            loop.close()
+        # Ensure proper shutdown
+        try:
+            await app.shutdown()
+            print("اپلیکیشن خاموش شد.")
+        except Exception as e:
+            print(f"خطا در خاموش کردن اپلیکیشن: {e}")
 
 if __name__ == "__main__":
     try:
-        asyncio.run(main())
-    except RuntimeError as e:
-        if "This event loop is already running" in str(e):
-            # If asyncio.run fails due to an existing loop, run main directly
-            loop = asyncio.get_event_loop()
-            loop.create_task(main())
-        else:
-            raise
+        # Try to get the running event loop
+        loop = asyncio.get_running_loop()
+        # Schedule the main coroutine as a task
+        loop.create_task(main())
+        print("ربات به صورت task در loop فعلی اجرا شد.")
+    except RuntimeError:
+        # If no running loop exists, create a new one
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        try:
+            loop.run_until_complete(main())
+        except Exception as e:
+            print(f"خطا در اجرای loop جدید: {e}")
+        finally:
+            try:
+                loop.run_until_complete(loop.shutdown_asyncgens())
+                loop.close()
+                print("Loop بسته شد.")
+            except Exception as e:
+                print(f"خطا در بستن loop: {e}")
