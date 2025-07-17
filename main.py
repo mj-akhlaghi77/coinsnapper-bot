@@ -206,9 +206,34 @@ async def main():
     app.add_handler(CallbackQueryHandler(handle_close_details, pattern="^close_details_"))
     app.add_handler(CommandHandler("setcommands", set_bot_commands))
 
-    await set_bot_commands(app.bot)
-    print("Bot is running...")
-    await app.run_polling()
+    # Get the current event loop or create a new one if none exists
+    loop = asyncio.get_event_loop()
+    try:
+        if loop.is_running():
+            # If loop is already running, create a new task
+            await app.initialize()
+            await set_bot_commands(app.bot)
+            print("Bot is running...")
+            await app.run_polling()
+            await app.shutdown()
+        else:
+            # If no loop is running, use run_until_complete
+            loop.run_until_complete(app.initialize())
+            await set_bot_commands(app.bot)
+            print("Bot is running...")
+            loop.run_until_complete(app.run_polling())
+            loop.run_until_complete(app.shutdown())
+    finally:
+        if not loop.is_running():
+            loop.close()
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except RuntimeError as e:
+        if "This event loop is already running" in str(e):
+            # If asyncio.run fails due to an existing loop, run main directly
+            loop = asyncio.get_event_loop()
+            loop.create_task(main())
+        else:
+            raise
