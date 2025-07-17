@@ -163,13 +163,20 @@ async def handle_details(update: Update, context: ContextTypes.DEFAULT_TYPE):
         category = data.get("category", "نامشخص")
         website = data.get("urls", {}).get("website", [""])[0]
         explorers = data.get("urls", {}).get("explorer", [])
-        explorer_links = "\n".join([f"🔗 {link}" for link in explorers[:3]]) if explorers else "🔍 در دسترس نیست."
+        explorer_links = "
+".join([f"🔗 {link}" for link in explorers[:3]]) if explorers else "🔍 در دسترس نیست."
+        whitepaper = data.get("urls", {}).get("technical_doc", [])
+        whitepaper_link = whitepaper[0] if whitepaper else None"🔍 در دسترس نیست."
 
         msg = f"""📜 <b>اطلاعات تکمیلی درباره {symbol}</b>
 
 📂 <b>دسته‌بندی</b>: {category}
 🌐 <b>وب‌سایت رسمی</b>: <a href=\"{website}\">{website}</a>
 🧾 <b>توضیحات</b>: {description[:1000]}...
+📆 <b>تاریخ اضافه شدن</b>: {data.get('date_added', 'نامشخص')}
+🏷 <b>برچسب‌ها</b>: {', '.join(data.get('tags', [])[:5]) or 'ندارد'}
+⚙️ <b>پلتفرم</b>: {data.get('platform', {}).get('name', 'ندارد')}
+📘 <b>وایت‌پیپر</b>: <a href=\"{whitepaper_link}\">{whitepaper_link}</a>" if whitepaper_link else "📘 <b>وایت‌پیپر</b>: موجود نیست"
 🛰 <b>اکسپلوررها</b>:
 {explorer_links}"""
 
@@ -195,17 +202,8 @@ async def main():
     app.add_handler(CommandHandler("setcommands", set_bot_commands))
 
     await set_bot_commands(app.bot)
-
-    await app.initialize()
-    await app.start()
-    await app.updater.start_polling()
-    await asyncio.Event().wait()
+    print("Bot is running...")
+    await app.run_polling()
 
 if __name__ == "__main__":
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    try:
-        loop.run_until_complete(main())
-    finally:
-        loop.run_until_complete(loop.shutdown_asyncgens())
-        loop.close()
+    asyncio.run(main())
