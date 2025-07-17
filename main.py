@@ -163,9 +163,7 @@ async def handle_details(update: Update, context: ContextTypes.DEFAULT_TYPE):
         category = data.get("category", "نامشخص")
         website = data.get("urls", {}).get("website", [""])[0]
         explorers = data.get("urls", {}).get("explorer", [])
-        explorer_links = "
-explorer_links = "\n".join([f"🔗 {link}" for link in explorers[:3]]) if explorers else "🔍 در دسترس نیست."
-explorer_links = "\n".join([f"🔗 {link}" for link in explorers[:3]]) if explorers else "🔍 در دسترس نیست."
+        explorer_links = "\n".join([f"🔗 {link}" for link in explorers[:3]]) if explorers else "🔍 در دسترس نیست."
         whitepaper = data.get("urls", {}).get("technical_doc", [])
         whitepaper_link = whitepaper[0] if whitepaper else None
         date_added = data.get("date_added", "نامشخص")
