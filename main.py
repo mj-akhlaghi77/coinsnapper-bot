@@ -221,7 +221,12 @@ async def main():
         await set_bot_commands(app.bot)
         # Start polling
         print("ربات در حال اجرا...")
-        await app.run_polling()
+        # Run polling with error handling
+        try:
+            await app.run_polling(poll_interval=1.0, timeout=10)
+        except Exception as e:
+            print(f"خطا در polling: {e}")
+            raise
     except Exception as e:
         print(f"خطا در اجرای ربات: {e}")
         raise
@@ -235,7 +240,7 @@ async def main():
 
 if __name__ == "__main__":
     try:
-        # Try to get the running event loop (for serverless environments)
+        # Try to get the running event loop (for serverless environments like Runflare/Cloudflare)
         loop = asyncio.get_running_loop()
         # Schedule the main coroutine as a task
         loop.create_task(main())
@@ -259,4 +264,6 @@ if __name__ == "__main__":
                     print(f"خطا در بستن loop: {e}")
         else:
             print(f"خطای غیرمنتظره در دسترسی به loop: {e}")
-            raise
+            # In serverless, we don't raise; just log and continue
+            loop.create_task(main())
+            print("ربات به صورت task در loop فعلی اجرا شد (تلاش دوم).")
