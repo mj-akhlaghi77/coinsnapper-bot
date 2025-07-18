@@ -1,4 +1,3 @@
-
 import os
 import json
 import asyncio
@@ -88,6 +87,7 @@ async def fetch_with_retry(url, headers, params=None, retries=3, delay=2):
             try:
                 async with session.get(url, headers=headers, params=params, timeout=10) as response:
                     response.raise_for_status()
+                    print(f"درخواست به {url} موفق بود (تلاش {attempt + 1}).")
                     return await response.json()
             except Exception as e:
                 print(f"تلاش {attempt + 1} ناموفق برای {url}: {e}")
@@ -216,6 +216,7 @@ async def handle_close_details(update: Update, context: ContextTypes.DEFAULT_TYP
         print(f"خطا در بستن جزئیات: {e}")
 
 async def main():
+    print("شروع ساخت اپلیکیشن...")
     app = ApplicationBuilder().token(BOT_TOKEN).build()
 
     app.add_handler(CommandHandler("start", start))
@@ -241,7 +242,8 @@ async def main():
                 poll_interval=1.0,
                 timeout=10,
                 drop_pending_updates=True,
-                allowed_updates=["message", "callback_query"]
+                allowed_updates=["message", "callback_query"],
+                close_loop=False  # Prevent closing the loop
             )
             print("Polling با موفقیت اجرا شد.")
         except Exception as e:
@@ -268,6 +270,9 @@ if __name__ == "__main__":
         # Schedule the main coroutine as a task
         loop.create_task(main())
         print("ربات به صورت task در loop فعلی اجرا شد.")
+        # Keep the script running without closing the loop
+        while True:
+            asyncio.sleep(3600)  # Sleep to keep the loop alive
     except RuntimeError as e:
         if "no running event loop" in str(e).lower():
             # If no running loop exists, create a new one
@@ -280,17 +285,13 @@ if __name__ == "__main__":
                 print("اجرای loop جدید کامل شد.")
             except Exception as e:
                 print(f"خطا در اجرای loop جدید: {e}")
-            finally:
-                # Only close the loop if we created it
-                try:
-                    print("بستن loop...")
-                    loop.run_until_complete(loop.shutdown_asyncgens())
-                    loop.close()
-                    print("Loop بسته شد.")
-                except Exception as e:
-                    print(f"خطا در بستن loop: {e}")
+            # Do NOT close the loop in serverless environment
         else:
             print(f"خطای غیرمنتظره در دسترسی به loop: {e}")
             # In serverless, schedule the task and continue
+            loop = asyncio.get_event_loop()
             loop.create_task(main())
             print("ربات به صورت task در loop فعلی اجرا شد (تلاش دوم).")
+            # Keep the script running without closing the loop
+            while True:
+                asyncio.sleep(3600)  # Sleep to keep the loop alive
