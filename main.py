@@ -292,7 +292,7 @@ async def main():
 # اجرای ربات
 if __name__ == "__main__":
     import asyncio
-asyncio.run(main())
+    asyncio.run(main())
     try:
         loop.run_until_complete(main())
     finally:
