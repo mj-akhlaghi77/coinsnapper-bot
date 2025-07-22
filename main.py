@@ -169,7 +169,7 @@ async def crypto_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
             name = result["name"]
             symbol = result["symbol"]
             price = result["quote"]["USD"]["price"]
-            change_1h70 = result["quote"]["USD"]["percent_change_1h"]
+            change_1h = result["quote"]["USD"]["percent_change_1h"]
             change_24h = result["quote"]["USD"]["percent_change_24h"]
             change_7d = result["quote"]["USD"]["percent_change_7d"]
             market_cap = result["quote"]["USD"]["market_cap"]
