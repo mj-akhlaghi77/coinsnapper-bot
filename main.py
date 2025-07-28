@@ -279,21 +279,31 @@ async def send_usage_report_to_channel(bot: Bot):
         response.raise_for_status()
         data = response.json()
 
-        usage = data["data"]["usage"]
-        plan = data["data"]["plan"]
+        usage = data.get("data", {}).get("usage", {}).get("current_month", {})
+        plan = data.get("data", {}).get("plan", {})
 
-        credits_total = plan["credit_limit"]
-        credits_used = usage["current_month"]["credits_used"]
-        credits_left = credits_total - credits_used
+        credits_used = usage.get("credits_used", "نامشخص")
+        credits_total = plan.get("credit_limit", "نامشخص")
+        plan_name = plan.get("name", "نامشخص")
 
-        msg = f"""📊 <b>وضعیت مصرف API کوین‌مارکت‌کپ</b>:\n
-🔹 پلن: {plan['name']}
+        credits_left = (
+            int(credits_total) - int(credits_used)
+            if credits_total != "نامشخص" and credits_used != "نامشخص"
+            else "نامشخص"
+        )
+
+        msg = f"""📊 <b>وضعیت مصرف API کوین‌مارکت‌کپ</b>:
+
+🔹 پلن: {plan_name}
 🔸 اعتبارات ماهانه: {credits_total}
 ✅ مصرف‌شده: {credits_used}
 🟢 باقی‌مانده: {credits_left}
 🕒 آخرین بروزرسانی: {datetime.now().strftime('%Y-%m-%d %H:%M')}
 """
         await bot.send_message(chat_id=REPORT_CHANNEL, text=msg, parse_mode="HTML")
+        print("✅ گزارش مصرف API با موفقیت به کانال ارسال شد.")
+    except Exception as e:
+        print(f"⚠️ خطا در ارسال گزارش API: {e}")
         print("✅ گزارش مصرف API با موفقیت به کانال ارسال شد.")
     except Exception as e:
         print(f"⚠️ خطا در ارسال گزارش API: {e}")
@@ -323,7 +333,7 @@ async def main():
         scheduler = AsyncIOScheduler()
         scheduler.add_job(send_usage_report_to_channel, "interval", minutes=2, args=[app.bot])
         scheduler.start()
-        print("📅 ارسال گزارش API هر ۱ ساعت فعال شد.")
+        print("📅 ارسال گزارش API هر ۲ دقیقه فعال شد.")
         await asyncio.Event().wait()  # نگه داشتن ربات تا خاموش شدن دستی
     except Exception as e:
         print(f"Error starting bot: {e}")
