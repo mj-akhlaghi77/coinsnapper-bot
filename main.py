@@ -1,17 +1,17 @@
 import os
-import json
 import requests
 from datetime import datetime
 from telegram import Update, ReplyKeyboardMarkup, InlineKeyboardMarkup, InlineKeyboardButton, Bot, BotCommand
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 import asyncio
+import telegram.error
 
-# دریافت توکن‌ها و ID ادمین از محیط
+# دریافت توکن‌ها و کانال‌ها از محیط
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 CMC_API_KEY = os.getenv("CMC_API_KEY")
-ADMIN_USER_ID = int(os.getenv("ADMIN_USER_ID", 0))  # باید تو Runflare تنظیم بشه
-REPORT_CHANNEL = os.getenv("REPORT_CHANNEL")  # آی‌دی یا یوزرنیم کانال برای گزارش
+REPORT_CHANNEL = os.getenv("REPORT_CHANNEL")  # کانال برای گزارش مصرف API
+INFO_CHANNEL = os.getenv("INFO_CHANNEL")    # کانال برای اطلاعات کاربران
 
 # بررسی وجود توکن‌ها
 if not BOT_TOKEN:
@@ -20,65 +20,53 @@ if not BOT_TOKEN:
 if not CMC_API_KEY:
     print("Error: CMC_API_KEY is not set in environment variables.")
     raise ValueError("CMC_API_KEY در متغیرهای محیطی تنظیم نشده است.")
-if not ADMIN_USER_ID:
-    print("Warning: ADMIN_USER_ID is not set. Settings access will be disabled.")
+if not REPORT_CHANNEL:
+    print("Warning: REPORT_CHANNEL is not set. API usage reports will not be sent.")
+if not INFO_CHANNEL:
+    print("Warning: INFO_CHANNEL is not set. User start reports will not be sent.")
 
-# مسیر فایل ذخیره‌سازی کاربران
-USERS_FILE = "users.json"
+# متغیر برای شماره‌گذاری کاربران
+user_counter = 0
+user_ids = {}  # دیکشنری برای ذخیره IDهای تخصیص‌یافته به کاربران
 
 # تبدیل امن اعداد
 def safe_number(value, fmt="{:,.2f}"):
     return fmt.format(value) if value is not None else "نامشخص"
 
-# ذخیره کاربر در فایل JSON
-def save_user(user_id, username):
-    try:
-        # خواندن کاربران فعلی
-        try:
-            with open(USERS_FILE, "r") as f:
-                users = json.load(f)
-        except (FileNotFoundError, json.JSONDecodeError):
-            users = {}
-
-        # افزودن یا به‌روزرسانی کاربر
-        users[str(user_id)] = {
-            "username": username or "نامشخص",
-            "last_start": datetime.now().isoformat()
-        }
-
-        # ذخیره در فایل
-        with open(USERS_FILE, "w") as f:
-            json.dump(users, f, ensure_ascii=False, indent=4)
-        print(f"User {user_id} ({username}) saved to {USERS_FILE}")
-    except Exception as e:
-        print(f"Error saving user {user_id}: {e}")
-
-# دریافت لیست کاربران
-def get_user_list():
-    try:
-        with open(USERS_FILE, "r") as f:
-            users = json.load(f)
-        return users
-    except (FileNotFoundError, json.JSONDecodeError):
-        return {}
-
 # تنظیم منوی دستورات
 async def set_bot_commands(bot: Bot):
     commands = [
-        BotCommand("start", "شروع ربات"),
-        BotCommand("settings", "تنظیمات ادمین (فقط ادمین)")
+        BotCommand("start", "شروع ربات")
     ]
     await bot.set_my_commands(commands)
-    print("Bot commands set: /start, /settings")
+    print("Bot commands set: /start")
 
 # /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    global user_counter
     user = update.effective_user
     user_id = user.id
     username = user.username or user.first_name or "بدون نام"
 
-    # ذخیره کاربر
-    save_user(user_id, username)
+    # تخصیص ID یکتا به کاربر
+    if user_id not in user_ids:
+        user_counter += 1
+        user_ids[user_id] = user_counter
+    custom_id = user_ids[user_id]
+
+    # ارسال اطلاعات کاربر به کانال INFO_CHANNEL
+    if INFO_CHANNEL:
+        try:
+            msg = f"""🔔 <b>کاربر جدید ربات را استارت کرد</b>:\n
+🆔 ID اختصاصی: {custom_id}\n
+🆔 ID تلگرام: {user_id}\n
+👤 نام کاربری: {username}\n
+🕒 زمان استارت: {datetime.now().strftime('%Y-%m-%d %H:%M')}
+"""
+            await context.bot.send_message(chat_id=INFO_CHANNEL, text=msg, parse_mode="HTML")
+            print(f"User start report sent to INFO_CHANNEL for user {user_id} (Custom ID: {custom_id}, Username: {username})")
+        except telegram.error.TelegramError as e:
+            print(f"Error sending user start report to INFO_CHANNEL: {e}")
 
     keyboard = [["📊 وضعیت کلی بازار"]]
     markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
@@ -88,28 +76,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         reply_markup=markup
     )
 
-# /settings (فقط برای ادمین)
-async def settings(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.effective_user.id
-    if user_id != ADMIN_USER_ID:
-        await update.message.reply_text("⚠️ دسترسی غیرمجاز! این دستور فقط برای ادمین است.")
-        print(f"Unauthorized access attempt to /settings by user {user_id}")
-        return
-
-    users = get_user_list()
-    if not users:
-        await update.message.reply_text("هیچ کاربری ربات را استارت نکرده است.")
-        print("No users found in settings")
-        return
-
-    total_users = len(users)
-    msg = f"<b>تنظیمات ادمین</b>:\n\n<b>اطلاعات کاربران</b>:\n"
-    for uid, info in users.items():
-        msg += f"ID: {uid}, نام کاربری: {info['username']}, آخرین استارت: {info['last_start']}\n"
-
-    await update.message.reply_text(msg, parse_mode="HTML")
-    print(f"Settings (user list) sent to admin {user_id}")
-
 # اطلاعات کلی بازار
 async def show_global_market(update: Update):
     url = "https://pro-api.coinmarketcap.com/v1/global-metrics/quotes/latest"
@@ -117,7 +83,7 @@ async def show_global_market(update: Update):
 
     try:
         print("Sending request to CoinMarketCap API for global market data...")
-        response = requests.get(url, headers=headers)
+        range = requests.get(url, headers=headers)
         response.raise_for_status()
         data = response.json()
 
@@ -300,7 +266,6 @@ async def main():
         print("Initializing Telegram bot...")
         app = ApplicationBuilder().token(BOT_TOKEN).build()
         app.add_handler(CommandHandler("start", start))
-        app.add_handler(CommandHandler("settings", settings))
         app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, crypto_info))
         app.add_handler(CallbackQueryHandler(handle_details, pattern="^details_"))
         app.add_handler(CallbackQueryHandler(handle_close_details, pattern="^close_details_"))
@@ -312,7 +277,21 @@ async def main():
         print("Bot is running...")
         await app.initialize()
         await app.start()
-        await app.updater.start_polling()
+
+        # تلاش برای Polling با مدیریت خطای Conflict
+        retry_count = 0
+        max_retries = 3
+        while retry_count < max_retries:
+            try:
+                await app.updater.start_polling()
+                break  # اگر Polling با موفقیت شروع شد، از حلقه خارج شو
+            except telegram.error.Conflict as e:
+                retry_count += 1
+                print(f"Conflict error occurred. Retry {retry_count}/{max_retries}...")
+                await asyncio.sleep(5)  # 5 ثانیه صبر قبل از تلاش مجدد
+                if retry_count == max_retries:
+                    print("Max retries reached. Stopping bot.")
+                    raise e
 
         # زمان‌بندی ارسال گزارش API هر 2 دقیقه
         scheduler = AsyncIOScheduler()
