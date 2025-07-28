@@ -5,12 +5,12 @@ from datetime import datetime
 from telegram import Update, ReplyKeyboardMarkup, InlineKeyboardMarkup, InlineKeyboardButton, Bot, BotCommand
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
+import asyncio
 
 # دریافت توکن‌ها و ID ادمین از محیط
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 CMC_API_KEY = os.getenv("CMC_API_KEY")
 ADMIN_USER_ID = int(os.getenv("ADMIN_USER_ID", 0))  # باید تو Runflare تنظیم بشه
-
 REPORT_CHANNEL = os.getenv("REPORT_CHANNEL")  # آی‌دی یا یوزرنیم کانال برای گزارش
 
 # بررسی وجود توکن‌ها
@@ -148,9 +148,9 @@ async def crypto_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await show_global_market(update)
         return
 
-    url = "https://pro-api.coinmarketcap.com/v1/cryptocurrency/listings/latest"
+    url = "https://pro-api.coinmarketcap.com/v1/cryptocurrency/quotes/latest"
     headers = {"Accepts": "application/json", "X-CMC_PRO_API_KEY": CMC_API_KEY}
-    params = {"start": 1, "limit": 5000, "convert": "USD"}
+    params = {"symbol": query.upper(), "convert": "USD"}
 
     try:
         print(f"Sending request to CoinMarketCap API for coin: {query}")
@@ -158,32 +158,27 @@ async def crypto_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
         response.raise_for_status()
         data = response.json()
 
-        if "data" not in data:
-            print("Error: 'data' key not found in API response.")
-            raise ValueError("پاسخ API شامل کلید 'data' نیست.")
+        if "data" not in data or query.upper() not in data["data"]:
+            print(f"Error: No data found for {query}")
+            await update.message.reply_text("❌ ارز مورد نظر پیدا نشد. لطفاً نام یا نماد دقیق وارد کنید.")
+            return
 
-        result = None
-        for coin in data["data"]:
-            if coin["name"].lower() == query or coin["symbol"].lower() == query:
-                result = coin
-                break
+        result = data["data"][query.upper()]
+        name = result["name"]
+        symbol = result["symbol"]
+        price = result["quote"]["USD"]["price"]
+        change_1h = result["quote"]["USD"]["percent_change_1h"]
+        change_24h = result["quote"]["USD"]["percent_change_24h"]
+        change_7d = result["quote"]["USD"]["percent_change_7d"]
+        market_cap = result["quote"]["USD"]["market_cap"]
+        volume_24h = result["quote"]["USD"]["volume_24h"]
+        circulating_supply = result["circulating_supply"]
+        total_supply = result["total_supply"]
+        max_supply = result["max_supply"]
+        num_pairs = result["num_market_pairs"]
+        rank = result["cmc_rank"]
 
-        if result:
-            name = result["name"]
-            symbol = result["symbol"]
-            price = result["quote"]["USD"]["price"]
-            change_1h = result["quote"]["USD"]["percent_change_1h"]
-            change_24h = result["quote"]["USD"]["percent_change_24h"]
-            change_7d = result["quote"]["USD"]["percent_change_7d"]
-            market_cap = result["quote"]["USD"]["market_cap"]
-            volume_24h = result["quote"]["USD"]["volume_24h"]
-            circulating_supply = result["circulating_supply"]
-            total_supply = result["total_supply"]
-            max_supply = result["max_supply"]
-            num_pairs = result["num_market_pairs"]
-            rank = result["cmc_rank"]
-
-            msg = f"""🔍 <b>اطلاعات ارز</b>:\n
+        msg = f"""🔍 <b>اطلاعات ارز</b>:\n
 🏷️ <b>نام</b>: {name}\n
 💱 <b>نماد</b>: {symbol}\n
 💵 <b>قیمت</b>: ${safe_number(price)}\n
@@ -198,12 +193,10 @@ async def crypto_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
 🛒 <b>تعداد بازارها</b>: {num_pairs}\n
 🏅 <b>رتبه بازار</b>: #{rank}
 """
-            keyboard = [[InlineKeyboardButton("📜 نمایش اطلاعات تکمیلی", callback_data=f"details_{symbol}")]]
-            reply_markup = InlineKeyboardMarkup(keyboard)
-            print(f"Sending coin info for {symbol} with inline button...")
-            await update.message.reply_text(msg, parse_mode="HTML", reply_markup=reply_markup)
-        else:
-            await update.message.reply_text("❌ ارز مورد نظر پیدا نشد. لطفاً نام یا نماد دقیق وارد کنید.")
+        keyboard = [[InlineKeyboardButton("📜 نمایش اطلاعات تکمیلی", callback_data=f"details_{symbol}")]]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        print(f"Sending coin info for {symbol} with inline button...")
+        await update.message.reply_text(msg, parse_mode="HTML", reply_markup=reply_markup)
 
     except (requests.RequestException, ValueError) as e:
         print(f"Error fetching coin data: {e}")
@@ -265,7 +258,7 @@ async def handle_close_details(update: Update, context: ContextTypes.DEFAULT_TYP
     print("Closing dialog message...")
     await query.message.delete()
 
-
+# ارسال گزارش مصرف API
 async def send_usage_report_to_channel(bot: Bot):
     if not REPORT_CHANNEL:
         print("REPORT_CHANNEL not set.")
@@ -278,36 +271,28 @@ async def send_usage_report_to_channel(bot: Bot):
         response = requests.get(url, headers=headers)
         response.raise_for_status()
         data = response.json()
+        print("API response for /v1/key/info:", data)  # چاپ پاسخ خام برای عیب‌یابی
 
         usage = data.get("data", {}).get("usage", {}).get("current_month", {})
         plan = data.get("data", {}).get("plan", {})
 
-        credits_used = usage.get("credits_used", "نامشخص")
-        credits_total = plan.get("credit_limit", "نامشخص")
-        plan_name = plan.get("name", "نامشخص")
-
-        credits_left = (
-            int(credits_total) - int(credits_used)
-            if credits_total != "نامشخص" and credits_used != "نامشخص"
-            else "نامشخص"
-        )
+        credits_used = usage.get("credits_used", 0)
+        credits_total = plan.get("credit_limit", 10000)  # پیش‌فرض برای پلن رایگان
+        plan_name = plan.get("name", "Free")  # پیش‌فرض برای پلن رایگان
+        credits_left = credits_total - credits_used
 
         msg = f"""📊 <b>وضعیت مصرف API کوین‌مارکت‌کپ</b>:
 
 🔹 پلن: {plan_name}
-🔸 اعتبارات ماهانه: {credits_total}
-✅ مصرف‌شده: {credits_used}
-🟢 باقی‌مانده: {credits_left}
+🔸 اعتبارات ماهانه: {credits_total:,}
+✅ مصرف‌شده: {credits_used:,}
+🟢 باقی‌مانده: {credits_left:,}
 🕒 آخرین بروزرسانی: {datetime.now().strftime('%Y-%m-%d %H:%M')}
 """
         await bot.send_message(chat_id=REPORT_CHANNEL, text=msg, parse_mode="HTML")
         print("✅ گزارش مصرف API با موفقیت به کانال ارسال شد.")
     except Exception as e:
         print(f"⚠️ خطا در ارسال گزارش API: {e}")
-        print("✅ گزارش مصرف API با موفقیت به کانال ارسال شد.")
-    except Exception as e:
-        print(f"⚠️ خطا در ارسال گزارش API: {e}")
-
 
 # تابع اصلی برای اجرای ربات
 async def main():
@@ -329,7 +314,7 @@ async def main():
         await app.start()
         await app.updater.start_polling()
 
-        # زمان‌بندی ارسال گزارش API هر ساعت
+        # زمان‌بندی ارسال گزارش API هر 2 دقیقه
         scheduler = AsyncIOScheduler()
         scheduler.add_job(send_usage_report_to_channel, "interval", minutes=2, args=[app.bot])
         scheduler.start()
@@ -344,10 +329,4 @@ async def main():
 
 # اجرای ربات
 if __name__ == "__main__":
-    import asyncio
     asyncio.run(main())
-    try:
-        loop.run_until_complete(main())
-    finally:
-        loop.run_until_complete(loop.shutdown_asyncgens())
-        loop.close()
