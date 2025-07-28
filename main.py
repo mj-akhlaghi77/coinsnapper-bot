@@ -4,11 +4,14 @@ import requests
 from datetime import datetime
 from telegram import Update, ReplyKeyboardMarkup, InlineKeyboardMarkup, InlineKeyboardButton, Bot, BotCommand
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, CallbackQueryHandler, filters, ContextTypes
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 # دریافت توکن‌ها و ID ادمین از محیط
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 CMC_API_KEY = os.getenv("CMC_API_KEY")
 ADMIN_USER_ID = int(os.getenv("ADMIN_USER_ID", 0))  # باید تو Runflare تنظیم بشه
+
+REPORT_CHANNEL = os.getenv("REPORT_CHANNEL")  # آی‌دی یا یوزرنیم کانال برای گزارش
 
 # بررسی وجود توکن‌ها
 if not BOT_TOKEN:
@@ -262,6 +265,40 @@ async def handle_close_details(update: Update, context: ContextTypes.DEFAULT_TYP
     print("Closing dialog message...")
     await query.message.delete()
 
+
+async def send_usage_report_to_channel(bot: Bot):
+    if not REPORT_CHANNEL:
+        print("REPORT_CHANNEL not set.")
+        return
+
+    url = "https://pro-api.coinmarketcap.com/v1/key/info"
+    headers = {"Accepts": "application/json", "X-CMC_PRO_API_KEY": CMC_API_KEY}
+
+    try:
+        response = requests.get(url, headers=headers)
+        response.raise_for_status()
+        data = response.json()
+
+        usage = data["data"]["usage"]
+        plan = data["data"]["plan"]
+
+        credits_total = plan["credit_limit"]
+        credits_used = usage["current_month"]["credits_used"]
+        credits_left = credits_total - credits_used
+
+        msg = f"""📊 <b>وضعیت مصرف API کوین‌مارکت‌کپ</b>:\n
+🔹 پلن: {plan['name']}
+🔸 اعتبارات ماهانه: {credits_total}
+✅ مصرف‌شده: {credits_used}
+🟢 باقی‌مانده: {credits_left}
+🕒 آخرین بروزرسانی: {datetime.now().strftime('%Y-%m-%d %H:%M')}
+"""
+        await bot.send_message(chat_id=REPORT_CHANNEL, text=msg, parse_mode="HTML")
+        print("✅ گزارش مصرف API با موفقیت به کانال ارسال شد.")
+    except Exception as e:
+        print(f"⚠️ خطا در ارسال گزارش API: {e}")
+
+
 # تابع اصلی برای اجرای ربات
 async def main():
     try:
@@ -281,6 +318,12 @@ async def main():
         await app.initialize()
         await app.start()
         await app.updater.start_polling()
+
+        # زمان‌بندی ارسال گزارش API هر ساعت
+        scheduler = AsyncIOScheduler()
+        scheduler.add_job(send_usage_report_to_channel, "interval", hours=1, args=[app.bot])
+        scheduler.start()
+        print("📅 ارسال گزارش API هر ۱ ساعت فعال شد.")
         await asyncio.Event().wait()  # نگه داشتن ربات تا خاموش شدن دستی
     except Exception as e:
         print(f"Error starting bot: {e}")
