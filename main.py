@@ -321,7 +321,7 @@ async def main():
 
         # زمان‌بندی ارسال گزارش API هر ساعت
         scheduler = AsyncIOScheduler()
-        scheduler.add_job(send_usage_report_to_channel, "interval", hours=1, args=[app.bot])
+        scheduler.add_job(send_usage_report_to_channel, "interval", minutes=2, args=[app.bot])
         scheduler.start()
         print("📅 ارسال گزارش API هر ۱ ساعت فعال شد.")
         await asyncio.Event().wait()  # نگه داشتن ربات تا خاموش شدن دستی
