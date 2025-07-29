@@ -9,26 +9,41 @@ import telegram.error
 
 # دریافت توکن‌ها و کانال‌ها از محیط
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-CMC_API_KEYS = os.getenv("CMC_API_KEYS")  # کلیدهای API به صورت رشته جدا شده با کاما
 REPORT_CHANNEL = os.getenv("REPORT_CHANNEL")  # کانال برای گزارش مصرف API
 INFO_CHANNEL = os.getenv("INFO_CHANNEL")    # کانال برای اطلاعات کاربران
 
-# بررسی وجود توکن‌ها
+# دریافت کلیدهای API به‌صورت جداگانه
+CMC_API_KEY_1 = os.getenv("CMC_API_KEY_1")
+CMC_API_KEY_2 = os.getenv("CMC_API_KEY_2")
+CMC_API_KEY_3 = os.getenv("CMC_API_KEY_3")
+
+# جمع‌آوری کلیدهای API در یک لیست
+api_keys = []
+if CMC_API_KEY_1:
+    api_keys.append(CMC_API_KEY_1.strip())
+if CMC_API_KEY_2:
+    api_keys.append(CMC_API_KEY_2.strip())
+if CMC_API_KEY_3:
+    api_keys.append(CMC_API_KEY_3.strip())
+
+# بررسی وجود توکن‌ها و کلیدها
 if not BOT_TOKEN:
     print("Error: BOT_TOKEN is not set in environment variables.")
     raise ValueError("BOT_TOKEN در متغیرهای محیطی تنظیم نشده است.")
-if not CMC_API_KEYS:
-    print("Error: CMC_API_KEYS is not set in environment variables.")
-    raise ValueError("CMC_API_KEYS در متغیرهای محیطی تنظیم نشده است.")
-if not REPORT_CHANNEL:
-    print("Warning: REPORT_CHANNEL is not set. API usage reports will not be sent.")
-if not INFO_CHANNEL:
-    print("Warning: INFO_CHANNEL is not set. User start reports will not be sent.")
+if not api_keys:
+    print("Error: No CMC_API_KEY variables are set in environment variables.")
+    error_msg = "⚠️ خطا: هیچ کلید API (CMC_API_KEY_1, CMC_API_KEY_2, CMC_API_KEY_3) در متغیرهای محیطی تنظیم نشده است."
+else:
+    error_msg = None
+
+# چاپ متغیرهای محیطی برای عیب‌یابی
+print(f"Environment variables: BOT_TOKEN={BOT_TOKEN[:6]}..., CMC_API_KEY_1={CMC_API_KEY_1[:6] if CMC_API_KEY_1 else None}..., "
+      f"CMC_API_KEY_2={CMC_API_KEY_2[:6] if CMC_API_KEY_2 else None}..., CMC_API_KEY_3={CMC_API_KEY_3[:6] if CMC_API_KEY_3 else None}..., "
+      f"REPORT_CHANNEL={REPORT_CHANNEL}, INFO_CHANNEL={INFO_CHANNEL}")
 
 # مدیریت کلیدهای API
-api_keys = CMC_API_KEYS.split(",")  # تبدیل رشته کلیدها به لیست
 current_key_index = 0
-current_api_key = api_keys[current_key_index].strip()
+current_api_key = api_keys[current_key_index] if api_keys else None
 
 # متغیر برای شماره‌گذاری کاربران
 user_counter = 0
@@ -41,6 +56,15 @@ def safe_number(value, fmt="{:,.2f}"):
 # بررسی و انتخاب کلید API با کردیت باقی‌مانده
 async def check_and_select_api_key(bot: Bot):
     global current_api_key, current_key_index
+    if not api_keys:
+        print("No API keys available.")
+        if REPORT_CHANNEL:
+            try:
+                await bot.send_message(chat_id=REPORT_CHANNEL, text=error_msg, parse_mode="HTML")
+            except telegram.error.TelegramError as e:
+                print(f"Error sending CMC_API_KEYS error to REPORT_CHANNEL: {e}")
+        return False
+
     url = "https://pro-api.coinmarketcap.com/v1/key/info"
     
     for index, key in enumerate(api_keys):
@@ -77,6 +101,11 @@ async def check_and_select_api_key(bot: Bot):
             print(f"Error checking API key {key[-6:]}: {e}")
             continue
     print("⚠️ هیچ کلید API با کردیت باقی‌مانده پیدا نشد.")
+    if REPORT_CHANNEL:
+        try:
+            await bot.send_message(chat_id=REPORT_CHANNEL, text="⚠️ هیچ کلید API با کردیت باقی‌مانده پیدا نشد.", parse_mode="HTML")
+        except telegram.error.TelegramError as e:
+            print(f"Error sending no API key warning to REPORT_CHANNEL: {e}")
     return False
 
 # تنظیم منوی دستورات
@@ -125,6 +154,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # اطلاعات کلی بازار
 async def show_global_market(update: Update):
     global current_api_key
+    if not current_api_key:
+        await update.message.reply_text("⚠️ هیچ کلید API معتبر در دسترس نیست.")
+        return
+
     url = "https://pro-api.coinmarketcap.com/v1/global-metrics/quotes/latest"
     headers = {"Accepts": "application/json", "X-CMC_PRO_API_KEY": current_api_key}
 
@@ -156,6 +189,10 @@ async def show_global_market(update: Update):
 # هندل پیام‌ها
 async def crypto_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
     global current_api_key
+    if not current_api_key:
+        await update.message.reply_text("⚠️ هیچ کلید API معتبر در دسترس نیست.")
+        return
+
     query = update.message.text.strip().lower()
 
     if query == "📊 وضعیت کلی بازار":
@@ -219,6 +256,10 @@ async def crypto_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # پردازش کلیک روی دکمه Inline برای اطلاعات تکمیلی
 async def handle_details(update: Update, context: ContextTypes.DEFAULT_TYPE):
     global current_api_key
+    if not current_api_key:
+        await update.callback_query.message.reply_text("⚠️ هیچ کلید API معتبر در دسترس نیست.")
+        return
+
     query = update.callback_query
     await query.answer()
 
@@ -279,6 +320,12 @@ async def send_usage_report_to_channel(bot: Bot):
     if not REPORT_CHANNEL:
         print("REPORT_CHANNEL not set.")
         return
+    if not current_api_key:
+        try:
+            await bot.send_message(chat_id=REPORT_CHANNEL, text="⚠️ هیچ کلید API معتبر در دسترس نیست.", parse_mode="HTML")
+        except telegram.error.TelegramError as e:
+            print(f"Error sending no API key warning to REPORT_CHANNEL: {e}")
+        return
 
     url = "https://pro-api.coinmarketcap.com/v1/key/info"
     headers = {"Accepts": "application/json", "X-CMC_PRO_API_KEY": current_api_key}
@@ -332,6 +379,12 @@ async def send_usage_report_to_channel(bot: Bot):
 async def send_api_summary_report(bot: Bot):
     if not REPORT_CHANNEL:
         print("REPORT_CHANNEL not set.")
+        return
+    if not api_keys:
+        try:
+            await bot.send_message(chat_id=REPORT_CHANNEL, text="⚠️ هیچ کلید API تنظیم نشده است.", parse_mode="HTML")
+        except telegram.error.TelegramError as e:
+            print(f"Error sending no API key warning to REPORT_CHANNEL: {e}")
         return
 
     url = "https://pro-api.coinmarketcap.com/v1/key/info"
@@ -389,7 +442,13 @@ async def main():
 
         # بررسی و انتخاب کلید API با کردیت هنگام استارت
         print("Checking API keys for available credits...")
-        await check_and_select_api_key(app.bot)
+        if error_msg and REPORT_CHANNEL:
+            try:
+                await app.bot.send_message(chat_id=REPORT_CHANNEL, text=error_msg, parse_mode="HTML")
+            except telegram.error.TelegramError as e:
+                print(f"Error sending CMC_API_KEYS error to REPORT_CHANNEL: {e}")
+        else:
+            await check_and_select_api_key(app.bot)
 
         print("Bot is running...")
         await app.initialize()
