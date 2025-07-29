@@ -9,7 +9,7 @@ import telegram.error
 
 # دریافت توکن‌ها و کانال‌ها از محیط
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-CMC_API_KEY = os.getenv("CMC_API_KEY")
+CMC_API_KEYS = os.getenv("CMC_API_KEYS")  # کلیدهای API به صورت رشته جدا شده با کاما
 REPORT_CHANNEL = os.getenv("REPORT_CHANNEL")  # کانال برای گزارش مصرف API
 INFO_CHANNEL = os.getenv("INFO_CHANNEL")    # کانال برای اطلاعات کاربران
 
@@ -17,13 +17,18 @@ INFO_CHANNEL = os.getenv("INFO_CHANNEL")    # کانال برای اطلاعات
 if not BOT_TOKEN:
     print("Error: BOT_TOKEN is not set in environment variables.")
     raise ValueError("BOT_TOKEN در متغیرهای محیطی تنظیم نشده است.")
-if not CMC_API_KEY:
-    print("Error: CMC_API_KEY is not set in environment variables.")
-    raise ValueError("CMC_API_KEY در متغیرهای محیطی تنظیم نشده است.")
+if not CMC_API_KEYS:
+    print("Error: CMC_API_KEYS is not set in environment variables.")
+    raise ValueError("CMC_API_KEYS در متغیرهای محیطی تنظیم نشده است.")
 if not REPORT_CHANNEL:
     print("Warning: REPORT_CHANNEL is not set. API usage reports will not be sent.")
 if not INFO_CHANNEL:
     print("Warning: INFO_CHANNEL is not set. User start reports will not be sent.")
+
+# مدیریت کلیدهای API
+api_keys = CMC_API_KEYS.split(",")  # تبدیل رشته کلیدها به لیست
+current_key_index = 0
+current_api_key = api_keys[current_key_index].strip()
 
 # متغیر برای شماره‌گذاری کاربران
 user_counter = 0
@@ -32,6 +37,47 @@ user_ids = {}  # دیکشنری برای ذخیره IDهای تخصیص‌یاف
 # تبدیل امن اعداد
 def safe_number(value, fmt="{:,.2f}"):
     return fmt.format(value) if value is not None else "نامشخص"
+
+# بررسی و انتخاب کلید API با کردیت باقی‌مانده
+async def check_and_select_api_key(bot: Bot):
+    global current_api_key, current_key_index
+    url = "https://pro-api.coinmarketcap.com/v1/key/info"
+    
+    for index, key in enumerate(api_keys):
+        key = key.strip()
+        headers = {"Accepts": "application/json", "X-CMC_PRO_API_KEY": key}
+        try:
+            response = requests.get(url, headers=headers)
+            response.raise_for_status()
+            data = response.json()
+            usage = data.get("data", {}).get("usage", {}).get("current_month", {})
+            plan = data.get("data", {}).get("plan", {})
+            credits_used = usage.get("credits_used", 0)
+            credits_total = plan.get("credit_limit", 10000)  # پیش‌فرض برای پلن رایگان
+            credits_left = credits_total - credits_used
+
+            if credits_left > 0:
+                current_api_key = key
+                current_key_index = index
+                print(f"Selected API key: {current_api_key[-6:]} (Key {current_key_index + 1}) with {credits_left} credits left")
+                # ارسال پیام به REPORT_CHANNEL
+                if REPORT_CHANNEL:
+                    try:
+                        msg = f"""✅ <b>کلید API انتخاب شد</b>:\n
+🔑 کلید شماره: {current_key_index + 1}\n
+🟢 کردیت‌های باقی‌مانده: {credits_left:,}\n
+🕒 زمان انتخاب: {datetime.now().strftime('%Y-%m-%d %H:%M')}
+"""
+                        await bot.send_message(chat_id=REPORT_CHANNEL, text=msg, parse_mode="HTML")
+                        print("✅ پیام انتخاب کلید API به کانال ارسال شد.")
+                    except telegram.error.TelegramError as e:
+                        print(f"Error sending API key selection message to REPORT_CHANNEL: {e}")
+                return True
+        except Exception as e:
+            print(f"Error checking API key {key[-6:]}: {e}")
+            continue
+    print("⚠️ هیچ کلید API با کردیت باقی‌مانده پیدا نشد.")
+    return False
 
 # تنظیم منوی دستورات
 async def set_bot_commands(bot: Bot):
@@ -78,12 +124,13 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # اطلاعات کلی بازار
 async def show_global_market(update: Update):
+    global current_api_key
     url = "https://pro-api.coinmarketcap.com/v1/global-metrics/quotes/latest"
-    headers = {"Accepts": "application/json", "X-CMC_PRO_API_KEY": CMC_API_KEY}
+    headers = {"Accepts": "application/json", "X-CMC_PRO_API_KEY": current_api_key}
 
     try:
         print("Sending request to CoinMarketCap API for global market data...")
-        range = requests.get(url, headers=headers)
+        response = requests.get(url, headers=headers)
         response.raise_for_status()
         data = response.json()
 
@@ -108,6 +155,7 @@ async def show_global_market(update: Update):
 
 # هندل پیام‌ها
 async def crypto_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    global current_api_key
     query = update.message.text.strip().lower()
 
     if query == "📊 وضعیت کلی بازار":
@@ -115,7 +163,7 @@ async def crypto_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     url = "https://pro-api.coinmarketcap.com/v1/cryptocurrency/quotes/latest"
-    headers = {"Accepts": "application/json", "X-CMC_PRO_API_KEY": CMC_API_KEY}
+    headers = {"Accepts": "application/json", "X-CMC_PRO_API_KEY": current_api_key}
     params = {"symbol": query.upper(), "convert": "USD"}
 
     try:
@@ -170,6 +218,7 @@ async def crypto_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # پردازش کلیک روی دکمه Inline برای اطلاعات تکمیلی
 async def handle_details(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    global current_api_key
     query = update.callback_query
     await query.answer()
 
@@ -179,7 +228,7 @@ async def handle_details(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         # درخواست به API برای اطلاعات تکمیلی
         url = "https://pro-api.coinmarketcap.com/v1/cryptocurrency/info"
-        headers = {"Accepts": "application/json", "X-CMC_PRO_API_KEY": CMC_API_KEY}
+        headers = {"Accepts": "application/json", "X-CMC_PRO_API_KEY": current_api_key}
         params = {"symbol": symbol}
 
         try:
@@ -224,14 +273,15 @@ async def handle_close_details(update: Update, context: ContextTypes.DEFAULT_TYP
     print("Closing dialog message...")
     await query.message.delete()
 
-# ارسال گزارش مصرف API
+# ارسال گزارش مصرف API (هر 2 دقیقه)
 async def send_usage_report_to_channel(bot: Bot):
+    global current_api_key, current_key_index
     if not REPORT_CHANNEL:
         print("REPORT_CHANNEL not set.")
         return
 
     url = "https://pro-api.coinmarketcap.com/v1/key/info"
-    headers = {"Accepts": "application/json", "X-CMC_PRO_API_KEY": CMC_API_KEY}
+    headers = {"Accepts": "application/json", "X-CMC_PRO_API_KEY": current_api_key}
 
     try:
         response = requests.get(url, headers=headers)
@@ -247,18 +297,81 @@ async def send_usage_report_to_channel(bot: Bot):
         plan_name = plan.get("name", "Free")  # پیش‌فرض برای پلن رایگان
         credits_left = credits_total - credits_used
 
-        msg = f"""📊 <b>وضعیت مصرف API کوین‌مارکت‌کپ</b>:
-
-🔹 پلن: {plan_name}
-🔸 اعتبارات ماهانه: {credits_total:,}
-✅ مصرف‌شده: {credits_used:,}
-🟢 باقی‌مانده: {credits_left:,}
+        # ارسال گزارش مصرف API
+        msg = f"""📊 <b>وضعیت مصرف API کوین‌مارکت‌کپ</b>:\n
+🔹 پلن: {plan_name}\n
+🔸 اعتبارات ماهانه: {credits_total:,}\n
+✅ مصرف‌شده: {credits_used:,}\n
+🟢 باقی‌مانده: {credits_left:,}\n
+🔑 کلید API فعال: شماره {current_key_index + 1} ({current_api_key[-6:]})\n
 🕒 آخرین بروزرسانی: {datetime.now().strftime('%Y-%m-%d %H:%M')}
 """
         await bot.send_message(chat_id=REPORT_CHANNEL, text=msg, parse_mode="HTML")
         print("✅ گزارش مصرف API با موفقیت به کانال ارسال شد.")
+
+        # بررسی محدودیت کردیت و سوییچ به کلید بعدی
+        if credits_left <= 0 and current_key_index < len(api_keys) - 1:
+            current_key_index += 1
+            current_api_key = api_keys[current_key_index].strip()
+            print(f"Switched to new API key: {current_api_key[-6:]} (Key {current_key_index + 1})")
+            # ارسال پیام هشدار به کانال
+            try:
+                warning_msg = f"""⚠️ <b>هشدار: کلید API قبلی تمام شد!</b>\n
+🔑 به کلید جدید سوییچ شد: شماره {current_key_index + 1} ({current_api_key[-6:]})\n
+🕒 زمان سوییچ: {datetime.now().strftime('%Y-%m-%d %H:%M')}
+"""
+                await bot.send_message(chat_id=REPORT_CHANNEL, text=warning_msg, parse_mode="HTML")
+                print("✅ پیام هشدار سوییچ کلید به کانال ارسال شد.")
+            except telegram.error.TelegramError as e:
+                print(f"Error sending API key switch warning to REPORT_CHANNEL: {e}")
+
     except Exception as e:
         print(f"⚠️ خطا در ارسال گزارش API: {e}")
+
+# ارسال گزارش کلی API (هر 5 دقیقه)
+async def send_api_summary_report(bot: Bot):
+    if not REPORT_CHANNEL:
+        print("REPORT_CHANNEL not set.")
+        return
+
+    url = "https://pro-api.coinmarketcap.com/v1/key/info"
+    total_credits_used = 0
+    total_credits_left = 0
+    active_keys = 0
+
+    for key in api_keys:
+        key = key.strip()
+        headers = {"Accepts": "application/json", "X-CMC_PRO_API_KEY": key}
+        try:
+            response = requests.get(url, headers=headers)
+            response.raise_for_status()
+            data = response.json()
+            usage = data.get("data", {}).get("usage", {}).get("current_month", {})
+            plan = data.get("data", {}).get("plan", {})
+            credits_used = usage.get("credits_used", 0)
+            credits_total = plan.get("credit_limit", 10000)  # پیش‌فرض برای پلن رایگان
+            credits_left = credits_total - credits_used
+
+            total_credits_used += credits_used
+            total_credits_left += credits_left
+            if credits_left > 0:
+                active_keys += 1
+        except Exception as e:
+            print(f"Error checking API key {key[-6:]} for summary: {e}")
+            continue
+
+    msg = f"""📋 <b>گزارش کلی API کوین‌مارکت‌کپ</b>:\n
+🔢 تعداد کل کلیدهای API: {len(api_keys)}\n
+🔑 تعداد کلیدهای فعال (با کردیت): {active_keys}\n
+✅ کل کردیت‌های مصرف‌شده: {total_credits_used:,}\n
+🟢 کل کردیت‌های باقی‌مانده: {total_credits_left:,}\n
+🕒 آخرین بروزرسانی: {datetime.now().strftime('%Y-%m-%d %H:%M')}
+"""
+    try:
+        await bot.send_message(chat_id=REPORT_CHANNEL, text=msg, parse_mode="HTML")
+        print("✅ گزارش کلی API با موفقیت به کانال ارسال شد.")
+    except telegram.error.TelegramError as e:
+        print(f"Error sending API summary report to REPORT_CHANNEL: {e}")
 
 # تابع اصلی برای اجرای ربات
 async def main():
@@ -273,6 +386,10 @@ async def main():
 
         # تنظیم منوی دستورات
         await set_bot_commands(app.bot)
+
+        # بررسی و انتخاب کلید API با کردیت هنگام استارت
+        print("Checking API keys for available credits...")
+        await check_and_select_api_key(app.bot)
 
         print("Bot is running...")
         await app.initialize()
@@ -293,11 +410,12 @@ async def main():
                     print("Max retries reached. Stopping bot.")
                     raise e
 
-        # زمان‌بندی ارسال گزارش API هر 2 دقیقه
+        # زمان‌بندی ارسال گزارش‌ها
         scheduler = AsyncIOScheduler()
         scheduler.add_job(send_usage_report_to_channel, "interval", minutes=2, args=[app.bot])
+        scheduler.add_job(send_api_summary_report, "interval", minutes=5, args=[app.bot])
         scheduler.start()
-        print("📅 ارسال گزارش API هر ۲ دقیقه فعال شد.")
+        print("📅 ارسال گزارش API هر ۲ دقیقه و گزارش کلی هر ۵ دقیقه فعال شد.")
         await asyncio.Event().wait()  # نگه داشتن ربات تا خاموش شدن دستی
     except Exception as e:
         print(f"Error starting bot: {e}")
