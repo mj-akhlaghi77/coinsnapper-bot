@@ -89,31 +89,46 @@ async def fetch_and_store_usdt_price(bot: Bot):
         print("NOBITEX_API_KEY not set.")
         return
     url = "https://api.nobitex.ir/market/stats"
-    headers = {"Authorization": f"Token {NOBITEX_API_KEY}"}
-    params = {"srcCurrency": "usdt", "dstCurrency": "rls"}
+    headers = {
+        "Authorization": f"Token {NOBITEX_API_KEY}",
+        "content-type": "application/json"
+    }
+    data = {
+        "srcCurrency": "usdt",
+        "dstCurrency": "rls"
+    }
 
     try:
-        response = requests.get(url, headers=headers, params=params)
+        response = requests.post(url, headers=headers, json=data, timeout=10)
         response.raise_for_status()
         data = response.json()
-        if "stats" in data and data["stats"]:
-            price = data["stats"]["close"]
+        if "stats" in data and "usdt-rls" in data["stats"]:
+            price = data["stats"]["usdt-rls"]["latest"]
             async with db_pool.acquire() as connection:
                 await connection.execute(
                     "INSERT INTO usdt_rls_price (price, timestamp) VALUES ($1, $2)",
-                    price, datetime.now()
+                    float(price), datetime.now()
                 )
             print(f"USDT price {price} IRR stored at {datetime.now()}")
             if REPORT_CHANNEL:
                 try:
-                    await bot.send_message(chat_id=REPORT_CHANNEL, text=f"✅ قیمت تتر به تومان: {safe_number(price, '{:,.0f}')} IRR", parse_mode="HTML")
+                    await bot.send_message(chat_id=REPORT_CHANNEL, text=f"✅ قیمت تتر به تومان: {safe_number(float(price), '{:,.0f}')} IRR", parse_mode="HTML")
                 except telegram.error.TelegramError as e:
                     print(f"Error sending USDT price to REPORT_CHANNEL: {e}")
         else:
-            print("No stats data found in Nobitex API response.")
-    except Exception as e:
+            print("No stats data found for usdt-rls in Nobitex API response.")
+            if REPORT_CHANNEL:
+                try:
+                    await bot.send_message(chat_id=REPORT_CHANNEL, text="⚠️ داده‌های آماری برای usdt-rls از نوبیتکس دریافت نشد.", parse_mode="HTML")
+                except telegram.error.TelegramError as e:
+                    print(f"Error sending Nobitex data error to REPORT_CHANNEL: {e}")
+    except requests.RequestException as e:
         print(f"Error fetching or storing USDT price: {e}")
-
+        if REPORT_CHANNEL:
+            try:
+                await bot.send_message(chat_id=REPORT_CHANNEL, text=f"⚠️ خطا در اتصال به API نوبیتکس: {str(e)}", parse_mode="HTML")
+            except telegram.error.TelegramError as e:
+                print(f"Error sending Nobitex connection error to REPORT_CHANNEL: {e}")
 # بررسی و انتخاب کلید API با کردیت باقی‌مانده
 async def check_and_select_api_key(bot: Bot):
     global current_api_key, current_key_index
