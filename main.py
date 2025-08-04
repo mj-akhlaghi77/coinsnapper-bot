@@ -82,10 +82,12 @@ async def fetch_and_store_usdt_price(bot: Bot):
     }
 
     try:
+        print(f"Sending request to Nobitex API: {url} with headers {headers}")
         response = requests.post(url, headers=headers, json=data, timeout=10)
+        print(f"Response status code: {response.status_code}")
         response.raise_for_status()
         data = response.json()
-        print(f"Nobitex API response: {data}")  # دیباگ برای دیدن پاسخ
+        print(f"Nobitex API response: {data}")  # دیباگ کامل پاسخ
         if "stats" in data and "usdt-rls" in data["stats"]:
             price = float(data["stats"]["usdt-rls"]["latest"])
             async with db_pool.acquire() as connection:
@@ -122,7 +124,9 @@ async def check_and_select_api_key(bot: Bot):
     for index, key in enumerate(api_keys):
         headers = {"Accepts": "application/json", "X-CMC_PRO_API_KEY": key}
         try:
-            response = requests.get(url, headers=headers)
+            print(f"Checking API key {key[-6:]} (Key {index + 1})")
+            response = requests.get(url, headers=headers, timeout=10)
+            print(f"CMC API response status: {response.status_code}")
             response.raise_for_status()
             data = response.json()
             usage = data.get("data", {}).get("usage", {}).get("current_month", {})
@@ -368,7 +372,9 @@ async def send_usage_report_to_channel(bot: Bot):
     headers = {"Accepts": "application/json", "X-CMC_PRO_API_KEY": current_api_key}
 
     try:
-        response = requests.get(url, headers=headers)
+        print(f"Sending usage report request to {url}")
+        response = requests.get(url, headers=headers, timeout=10)
+        print(f"CMC API response status for usage: {response.status_code}")
         response.raise_for_status()
         data = response.json()
         usage = data.get("data", {}).get("usage", {}).get("current_month", {})
@@ -421,7 +427,9 @@ async def send_api_summary_report(bot: Bot):
     for key in api_keys:
         headers = {"Accepts": "application/json", "X-CMC_PRO_API_KEY": key}
         try:
-            response = requests.get(url, headers=headers)
+            print(f"Checking summary for API key {key[-6:]}")
+            response = requests.get(url, headers=headers, timeout=10)
+            print(f"CMC API response status for summary: {response.status_code}")
             response.raise_for_status()
             data = response.json()
             usage = data.get("data", {}).get("usage", {}).get("current_month", {})
