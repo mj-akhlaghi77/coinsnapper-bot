@@ -6,11 +6,14 @@ from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, Cal
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 import asyncio
 import telegram.error
+import asyncpg
 
 # دریافت توکن‌ها و کانال‌ها از محیط
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 REPORT_CHANNEL = os.getenv("REPORT_CHANNEL")  # کانال برای گزارش مصرف API
 INFO_CHANNEL = os.getenv("INFO_CHANNEL")    # کانال برای اطلاعات کاربران
+DATABASE_URL = os.getenv("DATABASE_URL")     # رشته اتصال به دیتابیس
+NOBITEX_API_KEY = os.getenv("NOBITEX_API_KEY")  # کلید API نوبیتکس
 
 # دریافت کلیدهای API به‌صورت جداگانه
 CMC_API_KEY_1 = os.getenv("CMC_API_KEY_1")
@@ -35,11 +38,17 @@ if not api_keys:
     error_msg = "⚠️ خطا: هیچ کلید API (CMC_API_KEY_1, CMC_API_KEY_2, CMC_API_KEY_3) در متغیرهای محیطی تنظیم نشده است."
 else:
     error_msg = None
+if not DATABASE_URL:
+    print("Error: DATABASE_URL is not set in environment variables.")
+    raise ValueError("DATABASE_URL در متغیرهای محیطی تنظیم نشده است.")
+if not NOBITEX_API_KEY:
+    print("Error: NOBITEX_API_KEY is not set in environment variables.")
+    raise ValueError("NOBITEX_API_KEY در متغیرهای محیطی تنظیم نشده است.")
 
 # چاپ متغیرهای محیطی برای عیب‌یابی
 print(f"Environment variables: BOT_TOKEN={BOT_TOKEN[:6]}..., CMC_API_KEY_1={CMC_API_KEY_1[:6] if CMC_API_KEY_1 else None}..., "
       f"CMC_API_KEY_2={CMC_API_KEY_2[:6] if CMC_API_KEY_2 else None}..., CMC_API_KEY_3={CMC_API_KEY_3[:6] if CMC_API_KEY_3 else None}..., "
-      f"REPORT_CHANNEL={REPORT_CHANNEL}, INFO_CHANNEL={INFO_CHANNEL}")
+      f"REPORT_CHANNEL={REPORT_CHANNEL}, INFO_CHANNEL={INFO_CHANNEL}, DATABASE_URL={DATABASE_URL[:20]}..., NOBITEX_API_KEY={NOBITEX_API_KEY[:6]}...")
 
 # مدیریت کلیدهای API
 current_key_index = 0
@@ -49,9 +58,61 @@ current_api_key = api_keys[current_key_index] if api_keys else None
 user_counter = 0
 user_ids = {}  # دیکشنری برای ذخیره IDهای تخصیص‌یافته به کاربران
 
+# متغیر برای اتصال به دیتابیس
+db_pool = None
+
 # تبدیل امن اعداد
 def safe_number(value, fmt="{:,.2f}"):
     return fmt.format(value) if value is not None else "نامشخص"
+
+# ایجاد جدول در دیتابیس
+async def init_db():
+    global db_pool
+    try:
+        db_pool = await asyncpg.create_pool(DATABASE_URL)
+        async with db_pool.acquire() as connection:
+            await connection.execute('''
+                CREATE TABLE IF NOT EXISTS usdt_rls_price (
+                    id SERIAL PRIMARY KEY,
+                    price DECIMAL NOT NULL,
+                    timestamp TIMESTAMP NOT NULL
+                )
+            ''')
+        print("Database initialized with usdt_rls_price table.")
+    except Exception as e:
+        print(f"Error initializing database: {e}")
+        raise
+
+# دریافت قیمت تتر از نوبیتکس و ذخیره در دیتابیس
+async def fetch_and_store_usdt_price(bot: Bot):
+    if not NOBITEX_API_KEY:
+        print("NOBITEX_API_KEY not set.")
+        return
+    url = "https://api.nobitex.ir/market/stats"
+    headers = {"Authorization": f"Token {NOBITEX_API_KEY}"}
+    params = {"srcCurrency": "usdt", "dstCurrency": "rls"}
+
+    try:
+        response = requests.get(url, headers=headers, params=params)
+        response.raise_for_status()
+        data = response.json()
+        if "stats" in data and data["stats"]:
+            price = data["stats"]["close"]
+            async with db_pool.acquire() as connection:
+                await connection.execute(
+                    "INSERT INTO usdt_rls_price (price, timestamp) VALUES ($1, $2)",
+                    price, datetime.now()
+                )
+            print(f"USDT price {price} IRR stored at {datetime.now()}")
+            if REPORT_CHANNEL:
+                try:
+                    await bot.send_message(chat_id=REPORT_CHANNEL, text=f"✅ قیمت تتر به تومان: {safe_number(price, '{:,.0f}')} IRR", parse_mode="HTML")
+                except telegram.error.TelegramError as e:
+                    print(f"Error sending USDT price to REPORT_CHANNEL: {e}")
+        else:
+            print("No stats data found in Nobitex API response.")
+    except Exception as e:
+        print(f"Error fetching or storing USDT price: {e}")
 
 # بررسی و انتخاب کلید API با کردیت باقی‌مانده
 async def check_and_select_api_key(bot: Bot):
@@ -84,7 +145,6 @@ async def check_and_select_api_key(bot: Bot):
                 current_api_key = key
                 current_key_index = index
                 print(f"Selected API key: {current_api_key[-6:]} (Key {current_key_index + 1}) with {credits_left} credits left")
-                # ارسال پیام به REPORT_CHANNEL
                 if REPORT_CHANNEL:
                     try:
                         msg = f"""✅ <b>کلید API انتخاب شد</b>:\n
@@ -217,7 +277,7 @@ async def crypto_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
         result = data["data"][query.upper()]
         name = result["name"]
         symbol = result["symbol"]
-        price = result["quote"]["USD"]["price"]
+        price_usd = result["quote"]["USD"]["price"]
         change_1h = result["quote"]["USD"]["percent_change_1h"]
         change_24h = result["quote"]["USD"]["percent_change_24h"]
         change_7d = result["quote"]["USD"]["percent_change_7d"]
@@ -229,10 +289,19 @@ async def crypto_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
         num_pairs = result["num_market_pairs"]
         rank = result["cmc_rank"]
 
+        # دریافت آخرین قیمت تتر به تومان از دیتابیس
+        async with db_pool.acquire() as connection:
+            row = await connection.fetchrow("SELECT price FROM usdt_rls_price ORDER BY timestamp DESC LIMIT 1")
+            usdt_price_irr = row["price"] if row else None
+
+        # محاسبه قیمت تومانی
+        price_irr = price_usd * usdt_price_irr if usdt_price_irr else None
+
         msg = f"""🔍 <b>اطلاعات ارز</b>:\n
 🏷️ <b>نام</b>: {name}\n
 💱 <b>نماد</b>: {symbol}\n
-💵 <b>قیمت</b>: ${safe_number(price)}\n
+💵 <b>قیمت (دلار)</b>: ${safe_number(price_usd)}\n
+💸 <b>قیمت (تومان)</b>: {safe_number(price_irr, '{:,.0f}')} IRR\n
 ⏱️ <b>تغییر ۱ ساعته</b>: {safe_number(change_1h, "{:.2f}")}%\n
 📊 <b>تغییر ۲۴ ساعته</b>: {safe_number(change_24h, "{:.2f}")}%\n
 📅 <b>تغییر ۷ روزه</b>: {safe_number(change_7d, "{:.2f}")}%\n
@@ -267,7 +336,6 @@ async def handle_details(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if callback_data.startswith("details_"):
         symbol = callback_data[len("details_"):]
 
-        # درخواست به API برای اطلاعات تکمیلی
         url = "https://pro-api.coinmarketcap.com/v1/cryptocurrency/info"
         headers = {"Accepts": "application/json", "X-CMC_PRO_API_KEY": current_api_key}
         params = {"symbol": symbol}
@@ -289,7 +357,6 @@ async def handle_details(update: Update, context: ContextTypes.DEFAULT_TYPE):
             website = coin_data["urls"].get("website", ["ناموجود"])[0]
             logo = coin_data["logo"] if coin_data["logo"] else "ناموجود"
 
-            # پیام دیالوگ‌مانند
             msg = f"""📜 <b>اطلاعات تکمیلی ارز {coin_data['name']}</b>\n\n
 💬 <b>درباره {coin_data['name']}:</b> {description}\n
 📄 <b>وایت‌پیپر:</b> {whitepaper}\n
@@ -334,17 +401,16 @@ async def send_usage_report_to_channel(bot: Bot):
         response = requests.get(url, headers=headers)
         response.raise_for_status()
         data = response.json()
-        print("API response for /v1/key/info:", data)  # چاپ پاسخ خام برای عیب‌یابی
+        print("API response for /v1/key/info:", data)
 
         usage = data.get("data", {}).get("usage", {}).get("current_month", {})
         plan = data.get("data", {}).get("plan", {})
 
         credits_used = usage.get("credits_used", 0)
-        credits_total = plan.get("credit_limit", 10000)  # پیش‌فرض برای پلن رایگان
-        plan_name = plan.get("name", "Free")  # پیش‌فرض برای پلن رایگان
+        credits_total = plan.get("credit_limit", 10000)
+        plan_name = plan.get("name", "Free")
         credits_left = credits_total - credits_used
 
-        # ارسال گزارش مصرف API
         msg = f"""📊 <b>وضعیت مصرف API کوین‌مارکت‌کپ</b>:\n
 🔹 پلن: {plan_name}\n
 🔸 اعتبارات ماهانه: {credits_total:,}\n
@@ -356,12 +422,10 @@ async def send_usage_report_to_channel(bot: Bot):
         await bot.send_message(chat_id=REPORT_CHANNEL, text=msg, parse_mode="HTML")
         print("✅ گزارش مصرف API با موفقیت به کانال ارسال شد.")
 
-        # بررسی محدودیت کردیت و سوییچ به کلید بعدی
         if credits_left <= 0 and current_key_index < len(api_keys) - 1:
             current_key_index += 1
             current_api_key = api_keys[current_key_index].strip()
             print(f"Switched to new API key: {current_api_key[-6:]} (Key {current_key_index + 1})")
-            # ارسال پیام هشدار به کانال
             try:
                 warning_msg = f"""⚠️ <b>هشدار: کلید API قبلی تمام شد!</b>\n
 🔑 به کلید جدید سوییچ شد: شماره {current_key_index + 1} ({current_api_key[-6:]})\n
@@ -402,7 +466,7 @@ async def send_api_summary_report(bot: Bot):
             usage = data.get("data", {}).get("usage", {}).get("current_month", {})
             plan = data.get("data", {}).get("plan", {})
             credits_used = usage.get("credits_used", 0)
-            credits_total = plan.get("credit_limit", 10000)  # پیش‌فرض برای پلن رایگان
+            credits_total = plan.get("credit_limit", 10000)
             credits_left = credits_total - credits_used
 
             total_credits_used += credits_used
@@ -428,8 +492,10 @@ async def send_api_summary_report(bot: Bot):
 
 # تابع اصلی برای اجرای ربات
 async def main():
+    global db_pool
     try:
         print("Initializing Telegram bot...")
+        await init_db()  # ایجاد جدول دیتابیس
         app = ApplicationBuilder().token(BOT_TOKEN).build()
         app.add_handler(CommandHandler("start", start))
         app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, crypto_info))
@@ -469,17 +535,20 @@ async def main():
                     print("Max retries reached. Stopping bot.")
                     raise e
 
-        # زمان‌بندی ارسال گزارش‌ها
+        # زمان‌بندی دریافت قیمت تتر و ارسال گزارش‌ها
         scheduler = AsyncIOScheduler()
+        scheduler.add_job(fetch_and_store_usdt_price, "interval", minutes=3, args=[app.bot])
         scheduler.add_job(send_usage_report_to_channel, "interval", minutes=2, args=[app.bot])
         scheduler.add_job(send_api_summary_report, "interval", minutes=5, args=[app.bot])
         scheduler.start()
-        print("📅 ارسال گزارش API هر ۲ دقیقه و گزارش کلی هر ۵ دقیقه فعال شد.")
+        print("📅 دریافت قیمت تتر هر ۳ دقیقه، گزارش API هر ۲ دقیقه و گزارش کلی هر ۵ دقیقه فعال شد.")
         await asyncio.Event().wait()  # نگه داشتن ربات تا خاموش شدن دستی
     except Exception as e:
         print(f"Error starting bot: {e}")
         raise
     finally:
+        if db_pool:
+            await db_pool.close()
         await app.stop()
         await app.shutdown()
 
