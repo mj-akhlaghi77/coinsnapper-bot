@@ -3,3 +3,5 @@ requests
 aiohttp==3.9.5
 apscheduler==3.10.4
 asyncpg
+psycopg2-binary
+apscheduler
