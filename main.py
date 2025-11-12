@@ -653,8 +653,8 @@ async def main():
 
         # scheduler برای گزارش‌ها
         scheduler = AsyncIOScheduler()
-        scheduler.add_job(send_usage_report_to_channel, "interval", minutes=2, args=[app.bot])
-        scheduler.add_job(send_api_summary_report, "interval", minutes=5, args=[app.bot])
+        scheduler.add_job(send_usage_report_to_channel, "interval", minutes=60, args=[app.bot])
+        scheduler.add_job(send_api_summary_report, "interval", minutes=120, args=[app.bot])
         scheduler.start()
         print("Schedulers started (API reports).")
         await asyncio.Event().wait()
