@@ -283,7 +283,7 @@ async def send_usage_report_to_channel(bot: Bot):
 🕒 آخرین بروزرسانی: {to_shamsi(datetime.now())}
 """
         try:
-            await bot.send_message(chat_id=REPORT_CHANNEL, text=msg_active, parse_mode=\"HTML\")
+            await bot.send_message(chat_id=REPORT_CHANNEL, text=msg_active, parse_mode= "HTML")
         except telegram.error.TelegramError:
             pass
 
@@ -296,7 +296,7 @@ async def send_usage_report_to_channel(bot: Bot):
 🕒 آخرین بروزرسانی: {to_shamsi(datetime.now())}
 """
     try:
-        await bot.send_message(chat_id=REPORT_CHANNEL, text=msg_summary, parse_mode=\"HTML\")
+        await bot.send_message(chat_id=REPORT_CHANNEL, text=msg_summary, parse_mode= "HTML")
     except telegram.error.TelegramError:
         pass
 
