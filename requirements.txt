@@ -6,4 +6,3 @@ asyncpg
 psycopg2-binary
 apscheduler
 jdatetime
-
