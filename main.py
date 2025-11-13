@@ -561,23 +561,22 @@ async def crypto_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
         rank = result["cmc_rank"]
         
         msg = (
-            f"🔍 اطلاعات {name} ({symbol}):\n\n"
-            f"💵 قیمت: ${safe_number(price)}\n"
-            f"⏱ تغییر ۱ ساعته: {safe_number(change_1h, '{:.2f}')}%\n"
-            f"📊 تغییر ۲۴ ساعته: {safe_number(change_24h, '{:.2f}')}%\n"
-            f"📅 تغییر ۷ روزه: {safe_number(change_7d, '{:.2f}')}%\n"
-            f"📈 حجم ۲۴ساعته: ${safe_number(volume_24h, '{:,.0f}')}\n"
-            f"🔄 عرضه در گردش: ${safe_number(circulating_supply, "{:,.0f}")} {symbol}\n"
-            f"🌐 عرضه کل: ${safe_number(total_supply, "{:,.0f}")} {symbol}\n"
-            f"🚀 عرضه نهایی: ${safe_number(max_supply, "{:,.0f}")} {symbol}\n"
-            f"💰 مارکت کپ: ${safe_number(market_cap, '{:,.0f}')}\n"
-            f"🛒 بازارها: {num_pairs}\n"
-            f"🏅 رتبه: #{rank}"
 
-
-
-                
-
+            f"""🔍 <b>اطلاعات ارز</b>:\n
+🏷️ <b>نام</b>: {name}\n
+💱 <b>نماد</b>: {symbol}\n
+💵 <b>قیمت</b>: ${safe_number(price)}\n
+⏱️ <b>تغییر ۱ ساعته</b>: {safe_number(change_1h, "{:.2f}")}%\n
+📊 <b>تغییر ۲۴ ساعته</b>: {safe_number(change_24h, "{:.2f}")}%\n
+📅 <b>تغییر ۷ روزه</b>: {safe_number(change_7d, "{:.2f}")}%\n
+📈 <b>حجم معاملات ۲۴ساعته</b>: ${safe_number(volume_24h, "{:,.0f}")}\n
+💰 <b>ارزش کل بازار</b>: ${safe_number(market_cap, "{:,.0f}")}\n
+🔄 <b>عرضه در گردش</b>: ${safe_number(circulating_supply, "{:,.0f}")} {symbol}\n
+🌐 <b>عرضه کل</b>: ${safe_number(total_supply, "{:,.0f}")} {symbol}\n
+🚀 <b>عرضه نهایی</b>: ${safe_number(max_supply, "{:,.0f}")} {symbol}\n
+🛒 <b>تعداد بازارها</b>: {num_pairs}\n
+🏅 <b>رتبه بازار</b>: #{rank}
+"""
         )
         keyboard = []
         if subscribed:
