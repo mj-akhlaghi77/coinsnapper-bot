@@ -281,20 +281,20 @@ async def send_usage_report_to_channel(bot: Bot):
 🟢 باقی‌مانده: {credits_left:,}
 🔑 کلید API فعال: شماره {current_key_index + 1} ({current_api_key[-6:]})
 🕒 آخرین بروزرسانی: {to_shamsi(datetime.now())}
-\"\"\"
+"""
         try:
             await bot.send_message(chat_id=REPORT_CHANNEL, text=msg_active, parse_mode=\"HTML\")
         except telegram.error.TelegramError:
             pass
 
     # پیام گزارش کلی
-   msg_summary = f"""📋 <b>گزارش کلی API کوین‌مارکت‌کپ</b>:
+  msg_summary = f"""📋 <b>گزارش کلی API کوین‌مارکت‌کپ</b>:
 🔢 تعداد کل کلیدهای API: {len(api_keys)}
 🔑 تعداد کلیدهای فعال (با کردیت): {active_keys}
 ✅ کل کردیت‌های مصرف‌شده: {total_credits_used:,}
 🟢 کل کردیت‌های باقی‌مانده: {total_credits_left:,}
 🕒 آخرین بروزرسانی: {to_shamsi(datetime.now())}
-\"\"\"
+"""
     try:
         await bot.send_message(chat_id=REPORT_CHANNEL, text=msg_summary, parse_mode=\"HTML\")
     except telegram.error.TelegramError:
