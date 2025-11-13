@@ -9,7 +9,6 @@
 # psycopg2-binary
 # apscheduler
 # jdatetime
-
 import os
 import re
 import requests
