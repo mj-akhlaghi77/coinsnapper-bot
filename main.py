@@ -546,17 +546,20 @@ async def crypto_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("❌ ارز پیدا نشد — نماد رو دقیق وارد کن.")
             return
         result = data["data"][query.upper()]
-        name = result.get("name")
-        symbol = result.get("symbol")
+        name = result["name"]
+        symbol = result["symbol"]
         price = result["quote"]["USD"]["price"]
         change_1h = result["quote"]["USD"]["percent_change_1h"]
         change_24h = result["quote"]["USD"]["percent_change_24h"]
         change_7d = result["quote"]["USD"]["percent_change_7d"]
         market_cap = result["quote"]["USD"]["market_cap"]
         volume_24h = result["quote"]["USD"]["volume_24h"]
-        num_pairs = result.get("num_market_pairs")
-        rank = result.get("cmc_rank")
-
+        circulating_supply = result["circulating_supply"]
+        total_supply = result["total_supply"]
+        max_supply = result["max_supply"]
+        num_pairs = result["num_market_pairs"]
+        rank = result["cmc_rank"]
+        
         msg = (
             f"🔍 اطلاعات {name} ({symbol}):\n\n"
             f"💵 قیمت: ${safe_number(price)}\n"
@@ -564,9 +567,17 @@ async def crypto_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"📊 تغییر ۲۴ ساعته: {safe_number(change_24h, '{:.2f}')}%\n"
             f"📅 تغییر ۷ روزه: {safe_number(change_7d, '{:.2f}')}%\n"
             f"📈 حجم ۲۴ساعته: ${safe_number(volume_24h, '{:,.0f}')}\n"
+            f"🔄 عرضه در گردش: ${safe_number(circulating_supply, "{:,.0f}")} {symbol}\n"
+            f"🌐 عرضه کل: ${safe_number(total_supply, "{:,.0f}")} {symbol}\n"
+            f"🚀 عرضه نهایی: ${safe_number(max_supply, "{:,.0f}")} {symbol}\n"
             f"💰 مارکت کپ: ${safe_number(market_cap, '{:,.0f}')}\n"
             f"🛒 بازارها: {num_pairs}\n"
             f"🏅 رتبه: #{rank}"
+
+
+
+                
+
         )
         keyboard = []
         if subscribed:
