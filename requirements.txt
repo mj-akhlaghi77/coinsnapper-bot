@@ -5,3 +5,5 @@ apscheduler==3.10.4
 asyncpg
 psycopg2-binary
 apscheduler
+jdatetime
+
