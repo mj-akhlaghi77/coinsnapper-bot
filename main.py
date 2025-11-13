@@ -1,4 +1,6 @@
 # main.py
+# main.py (نسخه نهایی با رفع مشکل ادمین)
+
 import os
 import requests
 import jdatetime
@@ -28,7 +30,9 @@ REPORT_CHANNEL = os.getenv("REPORT_CHANNEL")
 CMC_API_KEY_1 = os.getenv("CMC_API_KEY_1")
 CMC_API_KEY_2 = os.getenv("CMC_API_KEY_2")
 CMC_API_KEY_3 = os.getenv("CMC_API_KEY_3")
-ADMIN_IDS = os.getenv("ADMIN_IDS")  # رشته: "123,456"
+
+# ✅ حالا هر دو اسم رو پشتیبانی می‌کنه
+ADMIN_IDS = os.getenv("ADMIN_IDS") or os.getenv("ADMIN_USER_ID")
 
 if not BOT_TOKEN:
     raise ValueError("BOT_TOKEN تنظیم نشده است.")
@@ -40,17 +44,19 @@ api_keys = [k.strip() for k in (CMC_API_KEY_1, CMC_API_KEY_2, CMC_API_KEY_3) if 
 current_key_index = 0
 current_api_key = api_keys[current_key_index] if api_keys else None
 
-# تبدیل ADMIN_IDS به لیست اعداد (محکم‌کاری)
+# تبدیل ADMIN_IDS به لیست اعداد
 ADMIN_ID_LIST = []
 if ADMIN_IDS:
     try:
         for part in ADMIN_IDS.split(","):
-            s = part.strip()
+            s = part.strip().replace('"', "").replace("'", "")
             if s:
                 ADMIN_ID_LIST.append(int(s))
     except Exception:
-        print("فرمت ADMIN_IDS اشتباه است. مثال صحیح: 12345678,87654321")
+        print("⚠️ فرمت ADMIN_IDS اشتباه است. مثال صحیح: 12345678,87654321")
         ADMIN_ID_LIST = []
+
+print("✅ لیست ادمین‌ها:", ADMIN_ID_LIST)
 
 # -------------------------
 # دیتابیس
