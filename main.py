@@ -377,75 +377,113 @@ async def check_subscription(update: Update, context: ContextTypes.DEFAULT_TYPE)
         await update.message.reply_text("اشتراک فعالی نداری. برای اطلاعات پرداخت /start رو بزن یا از دکمهٔ اشتراک استفاده کن.")
 
 # /verify <tx_hash>
+# /verify <tx_hash>
 async def verify_tx(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     args = context.args
+
     if not args:
-        await update.message.reply_text("لطفاً هش رو به شکل: /verify <TX_HASH> ارسال کن.")
+        await update.message.reply_text(
+            "لطفاً هش رو به شکل زیر بفرست:\n"
+            "<code>/verify YOUR_TX_HASH_HERE</code>",
+            parse_mode="HTML"
+        )
         return
+
     tx_hash = args[0].strip()
+    if len(tx_hash) < 30:
+        await udpate.message.reply_text("هش تراکنش معتبر نیست. دوباره امتحان کن.")
+        return
+
+    # ذخیره در دیتابیس
     conn = get_db_connection()
     cur = conn.cursor()
-    cur.execute("INSERT INTO payments (telegram_id, tx_hash, status) VALUES (%s, %s, %s) RETURNING id, created_at",
-                (user_id, tx_hash, 'pending'))
-    rec = cur.fetchone()
-    conn.commit()
-    payment_id = rec["id"]
-    created_at = rec["created_at"]
-    cur.close()
-    conn.close()
+    try:
+        cur.execute("""
+            INSERT INTO payments (telegram_id, tx_hash, status)
+            VALUES (%s, %s, 'pending')
+            RETURNING id, created_at
+        """, (user_id, tx_hash))
+        rec = cur.fetchone()
+        payment_id = rec["id"]
+        created_at = rec["created_at"]
+        conn.commit()
+    except Exception as e:
+        print(f"خطا در ذخیره پرداخت: {e}")
+        await update.message.reply_text("خطا در ثبت تراکنش. بعداً امتحان کن.")
+        cur.close()
+        conn.close()
+        return
+    finally:
+        cur.close()
+        conn.close()
 
-    await update.message.reply_text(f"هش ثبت شد (شناسه #{payment_id}). منتظر بررسی ادمین بمون — زود جواب می‌دم")
+    # پیام به کاربر
+    await update.message.reply_text(
+        f"هش تراکنش ثبت شد (شناسه: <code>#{payment_id}</code>)\n"
+        "منتظر بررسی ادمین باش — به زودی خبرت می‌کنم",
+        parse_mode="HTML"
+    )
 
+    # ارسال به کانال INFO_CHANNEL
     if INFO_CHANNEL:
         try:
             txt = (
-                f"تراکنش جدید ثبت شد\n\n"
+                f"<b>تراکنش جدید ثبت شد</b>\n\n"
                 f"کاربر: <code>{user_id}</code>\n"
                 f"هش: <code>{tx_hash}</code>\n"
-                f"payment_id: <code>{payment_id}</code>\n"
+                f"شناسه پرداخت: <code>#{payment_id}</code>\n"
                 f"زمان: {to_shamsi(created_at)}\n\n"
-                "از دکمه‌ها برای تایید یا رد استفاده کنید."
+                f"ادمین‌ها: از دکمه‌های زیر استفاده کنید"
             )
             keyboard = [
                 [
-                    InlineKeyboardButton("تأیید پرداخت", callback_data=f"admin_pay_approve:{payment_id}"),
-                    InlineKeyboardButton("رد پرداخت", callback_data=f"admin_pay_reject:{payment_id}")
+                    InlineKeyboardButton("تأیید", callback_data=f"admin_pay_approve:{payment_id}"),
+                    InlineKeyboardButton("رد", callback_data=f"admin_pay_reject:{payment_id}")
                 ]
             ]
-            await context.bot.send_message(chat_id=INFO_CHANNEL, text=txt, parse_mode="HTML",
-                                           reply_markup=InlineKeyboardMarkup(keyboard))
+            await context.bot.send_message(
+                chat_id=INFO_CHANNEL,
+                text=txt,
+                parse_mode="HTML",
+                reply_markup=InlineKeyboardMarkup(keyboard)
+            )
         except telegram.error.TelegramError as e:
-            print(f"Error sending to INFO_CHANNEL: {e}")
+            print(f"خطا در ارسال به کانال: {e}")
+            await update.message.reply_text("هش ثبت شد، اما ارسال به ادمین با مشکل مواجه شد.")
 
-# Callback ادمین
+
+# ====================== هندلر ادمین برای تأیید/رد پرداخت ======================
 async def admin_payment_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-    clicker = query.from_user.id
+    clicker_id = query.from_user.id
 
-    if clicker not in ADMIN_ID_LIST:
+    # فقط ادمین‌ها
+    if clicker_id not in ADMIN_ID_LIST:
         try:
-            await query.message.reply_text("شما دسترسی ادمین نداری.")
-        except Exception:
+            await query.edit_message_text("شما دسترسی ادمین ندارید.")
+        except:
             pass
         return
 
     data = query.data
     if ":" not in data:
-        await query.edit_message_text("داده نامعتبر.")
         return
+
     action, pid_str = data.split(":", 1)
     try:
         payment_id = int(pid_str)
     except ValueError:
-        await query.edit_message_text("payment_id نامعتبر.")
+        await query.edit_message_text("شناسه پرداخت نامعتبر است.")
         return
 
+    # دریافت اطلاعات پرداخت
     conn = get_db_connection()
     cur = conn.cursor()
-    cur.execute("SELECT id, telegram_id, tx_hash, status, created_at FROM payments WHERE id = %s", (payment_id,))
+    cur.execute("SELECT telegram_id, tx_hash, status FROM payments WHERE id = %s", (payment_id,))
     rec = cur.fetchone()
+
     if not rec:
         cur.close()
         conn.close()
@@ -455,52 +493,67 @@ async def admin_payment_callback(update: Update, context: ContextTypes.DEFAULT_T
     if rec["status"] != "pending":
         cur.close()
         conn.close()
-        await query.edit_message_text(f"این پرداخت قبلاً پردازش شده (وضعیت: {rec['status']}).")
+        await query.edit_message_text(f"این پرداخت قبلاً پردازش شده: {rec['status']}")
         return
 
-    payer = rec["telegram_id"]
+    payer_id = rec["telegram_id"]
     now = datetime.now()
 
+    # تأیید پرداخت
     if action == "admin_pay_approve":
-        new_expiry = activate_user_subscription(payer, days=30)
-        cur.execute("UPDATE payments SET status=%s, processed_at=%s, note=%s WHERE id=%s",
-                    ('approved', now, f"Approved by {clicker}", payment_id))
+        new_expiry = activate_user_subscription(payer_id, days=30)
+        cur.execute("""
+            UPDATE payments SET status='approved', processed_at=%s, note=%s WHERE id=%s
+        """, (now, f"تأیید شده توسط ادمین {clicker_id}", payment_id))
         conn.commit()
-        cur.close()
-        conn.close()
 
         try:
-            await query.edit_message_text(f"پرداخت #{payment_id} تأیید شد.\nکاربر: <code>{payer}</code>\nتمدید تا: {to_shamsi(new_expiry)}",
-                                          parse_mode="HTML")
-        except Exception:
+            await query.edit_message_text(
+                f"پرداخت #{payment_id} تأیید شد\n"
+                f"کاربر: <code>{payer_id}</code>\n"
+                f"تمدید تا: {to_shamsi(new_expiry)}",
+                parse_mode="HTML"
+            )
+        except:
             pass
 
         try:
-            await context.bot.send_message(chat_id=payer,
-                                           text=f"تبریک! پرداختت تایید شد و اشتراک تا {to_shamsi(new_expiry)} فعال شد.")
-        except telegram.error.TelegramError:
-            print(f"Couldn't notify user {payer} after approve.")
-        return
+            await context.bot.send_message(
+                chat_id=payer_id,
+                text=f"پرداختت تأیید شد!\n"
+                     f"اشتراک تا {to_shamsi(new_expiry)} فعال شد\n"
+                     f"از ربات لذت ببر"
+            )
+        except:
+            pass
 
+    # رد پرداخت
     elif action == "admin_pay_reject":
-        cur.execute("UPDATE payments SET status=%s, processed_at=%s, note=%s WHERE id=%s",
-                    ('rejected', now, f"Rejected by {clicker}", payment_id))
+        cur.execute("""
+            UPDATE payments SET status='rejected', processed_at=%s, note=%s WHERE id=%s
+        """, (now, f"رد شده توسط ادمین {clicker_id}", payment_id))
         conn.commit()
-        cur.close()
-        conn.close()
 
         try:
-            await query.edit_message_text(f"پرداخت #{payment_id} رد شد.\nکاربر: <code>{payer}</code>", parse_mode="HTML")
-        except Exception:
+            await query.edit_message_text(
+                f"پرداخت #{payment_id} رد شد\n"
+                f"کاربر: <code>{payer_id}</code>",
+                parse_mode="HTML"
+            )
+        except:
             pass
 
         try:
-            await context.bot.send_message(chat_id=payer,
-                                           text=f"متاسفم؛ پرداخت (#{payment_id}) معتبر نبود. اگر فکر می‌کنی اشتباه شده با ادمین تماس بگیر")
-        except telegram.error.TelegramError:
-            print(f"Couldn't notify user {payer} after reject.")
-        return
+            await context.bot.send_message(
+                chat_id=payer_id,
+                text=f"متأسفانه پرداخت (#{payment_id}) معتبر نبود.\n"
+                     f"اگر فکر می‌کنی اشتباه شده، با ادمین تماس بگیر."
+            )
+        except:
+            pass
 
+    cur.close()
+    conn.close()
 # وضعیت کلی بازار
 async def show_global_market(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id if update.message else update.callback_query.from_user.id
