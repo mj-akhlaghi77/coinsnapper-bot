@@ -707,29 +707,37 @@ async def crypto_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("ارز پیدا نشد — نام یا نماد دقیق وارد کن.")
             return
 
-        result = data["data"][query_symbol.upper()]
-        name = result.get("name")
-        symbol = result.get("symbol")
+         result = data["data"][query.upper()]
+        name = result["name"]
+        symbol = result["symbol"]
         price = result["quote"]["USD"]["price"]
-        change_1h = result["quote"]["USD"].get("percent_change_1h")
-        change_24h = result["quote"]["USD"].get("percent_change_24h")
-        change_7d = result["quote"]["USD"].get("percent_change_7d")
-        market_cap = result["quote"]["USD"].get("market_cap")
-        volume_24h = result["quote"]["USD"].get("volume_24h")
-        num_pairs = result.get("num_market_pairs")
-        rank = result.get("cmc_rank")
+        change_1h = result["quote"]["USD"]["percent_change_1h"]
+        change_24h = result["quote"]["USD"]["percent_change_24h"]
+        change_7d = result["quote"]["USD"]["percent_change_7d"]
+        market_cap = result["quote"]["USD"]["market_cap"]
+        volume_24h = result["quote"]["USD"]["volume_24h"]
+        circulating_supply = result["circulating_supply"]
+        total_supply = result["total_supply"]
+        max_supply = result["max_supply"]
+        num_pairs = result["num_market_pairs"]
+        rank = result["cmc_rank"]
 
-        msg = (
-            f"اطلاعات {name} ({symbol}):\n\n"
-            f"قیمت: ${safe_number(price)}\n"
-            f"تغییر ۱ ساعته: {safe_number(change_1h, '{:.2f}')}%\n"
-            f"تغییر ۲۴ ساعته: {safe_number(change_24h, '{:.2f}')}%\n"
-            f"تغییر ۷ روزه: {safe_number(change_7d, '{:.2f}')}%\n"
-            f"حجم ۲۴ساعته: ${safe_number(volume_24h, '{:,.0f}')}\n"
-            f"مارکت کپ: ${safe_number(market_cap, '{:,.0f}')}\n"
-            f"بازارها: {num_pairs}\n"
-            f"رتبه: #{rank}"
-        )
+        msg = f"""🔍 <b>اطلاعات ارز</b>:\n
+🏷️ <b>نام</b>: {name}\n
+💱 <b>نماد</b>: {symbol}\n
+💵 <b>قیمت</b>: ${safe_number(price)}\n
+⏱️ <b>تغییر ۱ ساعته</b>: {safe_number(change_1h, "{:.2f}")}%\n
+📊 <b>تغییر ۲۴ ساعته</b>: {safe_number(change_24h, "{:.2f}")}%\n
+📅 <b>تغییر ۷ روزه</b>: {safe_number(change_7d, "{:.2f}")}%\n
+📈 <b>حجم معاملات ۲۴ساعته</b>: ${safe_number(volume_24h, "{:,.0f}")}\n
+💰 <b>ارزش کل بازار</b>: ${safe_number(market_cap, "{:,.0f}")}\n
+🔄 <b>عرضه در گردش</b>: ${safe_number(circulating_supply, "{:,.0f}")} {symbol}\n
+🌐 <b>عرضه کل</b>: ${safe_number(total_supply, "{:,.0f}")} {symbol}\n
+🚀 <b>عرضه نهایی</b>: ${safe_number(max_supply, "{:,.0f}")} {symbol}\n
+🛒 <b>تعداد بازارها</b>: {num_pairs}\n
+🏅 <b>رتبه بازار</b>: #{rank}
+"""
+  
 
         keyboard = [[InlineKeyboardButton("اطلاعات تکمیلی", callback_data=f"details_{symbol}")]]
         await update.message.reply_text(msg, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(keyboard))
