@@ -21,6 +21,7 @@ import asyncio
 import telegram.error
 import psycopg2
 from psycopg2.extras import DictCursor
+from deep_analysis import get_deep_analysis, init_cache_table
 
 # -------------------------
 # تنظیمات محیطی
@@ -527,59 +528,85 @@ async def show_global_market(update: Update, context: ContextTypes.DEFAULT_TYPE)
         await (update.message or update.callback_query.message).reply_text("خطا در دریافت وضعیت کلی بازار.")
 
 # اطلاعات تکمیلی
+# ====================== تحلیل عمیق با کش در دیتابیس ======================
 async def handle_details_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     user_id = query.from_user.id
     subscribed, _ = check_subscription_status(user_id)
-    symbol = query.data[len("details_"):]
+    symbol = query.data[len("details_"):].upper()
 
     if not subscribed:
-        await query.message.reply_text("برای دیدن اطلاعات تکمیلی باید اشتراک داشته باشی.")
+        await query.message.reply_text("برای تحلیل عمیق باید اشتراک داشته باشی.")
         return
 
-    if not current_api_key:
-        await query.message.reply_text("کلید CoinMarketCap فعلاً فعال نیست.")
-        return
+    # نمایش لودینگ
+    loading = await query.message.reply_text("در حال آماده‌سازی تحلیل عمیق توسط هوش مصنوعی...")
 
-    url = "https://pro-api.coinmarketcap.com/v1/cryptocurrency/info"
-    headers = {"Accepts": "application/json", "X-CMC_PRO_API_KEY": current_api_key}
-    params = {"symbol": symbol}
+    # ساختار اولیه داده‌ها
+    coin_data = {
+        "symbol": symbol,
+        "name": symbol,
+        "description": "",
+        "website": "در حال بارگذاری...",
+        "whitepaper": "در حال بارگذاری...",
+        "contracts": [],
+        "price": 0,
+        "market_cap": 0,
+        "volume_24h": 0
+    }
+
+    # دریافت اطلاعات از CMC
     try:
-        resp = requests.get(url, headers=headers, params=params, timeout=10)
-        resp.raise_for_status()
-        data = resp.json()
-        if "data" not in data or symbol.upper() not in data["data"]:
-            await query.message.reply_text("اطلاعات تکمیلی پیدا نشد.")
-            return
-        coin = data["data"][symbol.upper()]
-
-        desc = coin.get("description") or "ندارد"
-        whitepaper = coin.get("urls", {}).get("technical_doc", ["ندارد"])[0]
-        website = coin.get("urls", {}).get("website", ["ندارد"])[0]
-
-        contracts_info = []
-        if coin.get("contracts"):
-            for c in coin.get("contracts", []):
+        # اطلاعات پایه
+        url = "https://pro-api.coinmarketcap.com/v1/cryptocurrency/info"
+        headers = {"X-CMC_PRO_API_KEY": current_api_key}
+        resp = requests.get(url, headers=headers, params={"symbol": symbol}, timeout=10)
+        if resp.ok:
+            data = resp.json()["data"][symbol]
+            coin_data.update({
+                "name": data.get("name", symbol),
+                "description": data.get("description", "")[:3000],
+                "website": data.get("urls", {}).get("website", ["ندارد"])[0],
+                "whitepaper": data.get("urls", {}).get("technical_doc", ["ندارد"])[0],
+            })
+            # قراردادها
+            for c in data.get("contracts", []):
                 addr = c.get("contract_address") or c.get("address")
-                network = c.get("platform") or c.get("name")
+                net = c.get("platform") or c.get("name")
                 if addr:
-                    contracts_info.append(f"{network or 'شبکه'}: {addr}")
-        if coin.get("platform"):
-            platform = coin.get("platform", {})
-            addr = platform.get("token_address") or platform.get("contract_address")
-            if addr:
-                network = platform.get("name") or "شером"
-                contracts_info.append(f"{network}: {addr}")
+                    coin_data["contracts"].append({"network": net, "address": addr})
 
-        contract_text = "\n".join(contracts_info) if contracts_info else "اطلاعات قرارداد در CMC موجود نیست."
-
-        msg = f"اطلاعات تکمیلی {coin.get('name','')}\n\n{desc[:1200]}...\n\nوایت‌پیپر: {whitepaper}\nوب: {website}\n\nقراردادها:\n{contract_text}"
-        keyboard = [[InlineKeyboardButton("بستن", callback_data=f"close_details_{symbol}")]]
-        await query.message.reply_text(msg, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(keyboard))
+        # قیمت، مارکت کپ، حجم
+        qurl = "https://pro-api.coinmarketcap.com/v1/cryptocurrency/quotes/latest"
+        qresp = requests.get(qurl, headers=headers, params={"symbol": symbol}, timeout=8)
+        if qresp.ok:
+            q = qresp.json()["data"][symbol]["quote"]["USD"]
+            coin_data.update({
+                "price": q.get("price", 0),
+                "market_cap": q.get("market_cap", 0),
+                "volume_24h": q.get("volume_24h", 0)
+            })
     except Exception as e:
-        print(f"Error details: {e}")
-        await query.message.reply_text("خطا در دریافت اطلاعات تکمیلی.")
+        print(f"خطا در دریافت داده‌های CMC: {e}")
+
+    # دریافت تحلیل عمیق (کش یا API)
+    analysis = get_deep_analysis(coin_data)
+
+    # حذف لودینگ
+    try:
+        await loading.delete()
+    except:
+        pass
+
+    # ارسال تحلیل
+    keyboard = [[InlineKeyboardButton("بستن", callback_data=f"close_details_{symbol.lower()}")]]
+    await query.message.reply_text(
+        analysis,
+        parse_mode="HTML",
+        reply_markup=InlineKeyboardMarkup(keyboard),
+        disable_web_page_preview=True
+    )
 
 async def handle_close_details(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -692,6 +719,7 @@ async def main():
     try:
         print("راه‌اندازی ربات...")
         init_db()
+        init_cache_table()
         app = ApplicationBuilder().token(BOT_TOKEN).build()
 
         # هندلرها
