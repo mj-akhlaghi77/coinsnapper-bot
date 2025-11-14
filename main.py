@@ -707,7 +707,7 @@ async def crypto_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text("ارز پیدا نشد — نام یا نماد دقیق وارد کن.")
             return
 
-         result = data["data"][query.upper()]
+        result = data["data"][query_symbol.upper()]
         name = result["name"]
         symbol = result["symbol"]
         price = result["quote"]["USD"]["price"]
