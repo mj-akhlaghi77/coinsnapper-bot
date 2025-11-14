@@ -291,7 +291,7 @@ async def set_bot_commands(bot: Bot):
     await bot.set_my_commands(commands)
 
 # /start — با کیبورد پایین
-# /start — دکمه‌ها برای همه نمایش داده بشه
+# /start — دکمه‌ها بر اساس اشتراک
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     user_id = user.id
@@ -300,12 +300,19 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     msg = "سلام! اسم یا نماد یه ارز رو بفرست (مثلاً BTC یا بیت‌کوین) تا اطلاعاتشو برات بیارم."
 
-    # کیبورد برای همه (حتی بدون اشتراک)
-    keyboard = [
-        [KeyboardButton("وضعیت کلی بازار")],  # همیشه نمایش داده میشه
-        [KeyboardButton("بررسی اشتراک")],
-        [KeyboardButton("اشتراک و پرداخت")]
-    ]
+    # ساخت کیبورد بر اساس اشتراک
+    if subscribed:
+        # فقط برای مشترکین
+        keyboard = [
+            [KeyboardButton("وضعیت کلی بازار")],
+            [KeyboardButton("بررسی اشتراک")]
+        ]
+    else:
+        # برای غیرمشترکین
+        keyboard = [
+            [KeyboardButton("وضعیت کلی بازار")],
+            [KeyboardButton("اشتراک و پرداخت")]
+        ]
 
     reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=False)
 
@@ -314,6 +321,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception:
         await update.message.reply_text(msg)
 
+    # گزارش به کانال
     if INFO_CHANNEL:
         try:
             await context.bot.send_message(
@@ -333,19 +341,21 @@ async def handle_keyboard_buttons(update: Update, context: ContextTypes.DEFAULT_
 
     if text == "وضعیت کلی بازار":
         if not subscribed:
-            await update.message.reply_text("برای دیدن وضعیت کلی بازار باید اشتراک داشته باشی.\nاز دکمه «اشتراک و پرداخت» استفاده کن.")
+            await update.message.reply_text(
+                "برای دیدن وضعیت کلی بازار باید اشتراک داشته باشی.\n"
+                "از دکمه «اشتراک و پرداخت» استفاده کن."
+            )
             return
         await show_global_market(update, context)
         return
 
     elif text == "بررسی اشتراک":
-        if subscribed:
-            await update.message.reply_text(f"اشتراک فعاله — حدوداً {days_left} روز باقیه.")
-        else:
-            await update.message.reply_text("اشتراک فعال نداری. از دکمه «اشتراک و پرداخت» استفاده کن.")
+        # فقط مشترکین این دکمه رو دارن، پس همیشه اشتراک دارن
+        await update.message.reply_text(f"اشتراک فعاله — حدوداً {days_left} روز باقیه.")
         return
 
     elif text == "اشتراک و پرداخت":
+        # فقط غیرمشترکین این دکمه رو دارن
         tron_address = TRON_ADDRESS or "آدرس پرداخت هنوز تنظیم نشده است."
         await update.message.reply_text(
             f"<b>اشتراک ماهیانه (۵ ترون)</b>\n\n"
