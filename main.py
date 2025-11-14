@@ -290,24 +290,21 @@ async def set_bot_commands(bot: Bot):
     await bot.set_my_commands(commands)
 
 # /start — با کیبورد پایین
+# /start — دکمه‌ها برای همه نمایش داده بشه
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     user_id = user.id
     register_user_if_not_exists(user_id)
     subscribed, days_left = check_subscription_status(user_id)
 
-    msg = "سلام! 👋\nاسم یا نماد یه ارز رو بفرست (مثلاً BTC یا بیت‌کوین) تا اطلاعاتشو برات بیارم."
+    msg = "سلام! اسم یا نماد یه ارز رو بفرست (مثلاً BTC یا بیت‌کوین) تا اطلاعاتشو برات بیارم."
 
-    # کیبورد پایین
-    if subscribed:
-        keyboard = [
-            [KeyboardButton("وضعیت کلی بازار")],
-            [KeyboardButton("بررسی اشتراک")]
-        ]
-    else:
-        keyboard = [
-            [KeyboardButton("اشتراک و پرداخت")]
-        ]
+    # کیبورد برای همه (حتی بدون اشتراک)
+    keyboard = [
+        [KeyboardButton("وضعیت کلی بازار")],  # همیشه نمایش داده میشه
+        [KeyboardButton("بررسی اشتراک")],
+        [KeyboardButton("اشتراک و پرداخت")]
+    ]
 
     reply_markup = ReplyKeyboardMarkup(keyboard, resize_keyboard=True, one_time_keyboard=False)
 
@@ -327,30 +324,34 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             pass
 
 # هندلر کلیک روی دکمه‌های کیبورد پایین
+# هندلر کلیک روی دکمه‌های کیبورد پایین
 async def handle_keyboard_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text.strip()
     user_id = update.effective_user.id
-    subscribed, _ = check_subscription_status(user_id)
+    subscribed, days_left = check_subscription_status(user_id)
 
     if text == "وضعیت کلی بازار":
         if not subscribed:
-            await update.message.reply_text("برای دیدن وضعیت کلی بازار باید اشتراک داشته باشی. از دکمه اشتراک استفاده کن.")
+            await update.message.reply_text("برای دیدن وضعیت کلی بازار باید اشتراک داشته باشی.\nاز دکمه «اشتراک و پرداخت» استفاده کن.")
             return
         await show_global_market(update, context)
         return
 
     elif text == "بررسی اشتراک":
         if subscribed:
-            await update.message.reply_text(f"اشتراک فعاله — حدوداً {check_subscription_status(user_id)[1]} روز باقیه.")
+            await update.message.reply_text(f"اشتراک فعاله — حدوداً {days_left} روز باقیه.")
         else:
-            await update.message.reply_text("اشتراک فعال نداری. از دکمه اشتراک استفاده کن.")
+            await update.message.reply_text("اشتراک فعال نداری. از دکمه «اشتراک و پرداخت» استفاده کن.")
         return
 
     elif text == "اشتراک و پرداخت":
-        tron_msg = TRON_ADDRESS or "آدرس پرداخت هنوز تنظیم نشده."
+        tron_address = TRON_ADDRESS or "آدرس پرداخت هنوز تنظیم نشده است."
         await update.message.reply_text(
-            f"برای اشتراک ماهیانه (۵ ترون)، مبلغ رو به این آدرس واریز کن:\n\n<code>{tron_msg}</code>\n\n"
-            "سپس هش تراکنش رو با /verify <TX_HASH> ارسال کن.",
+            f"<b>اشتراک ماهیانه (۵ ترون)</b>\n\n"
+            f"مبلغ رو به این آدرس واریز کن:\n\n"
+            f"<code>{tron_address}</code>\n\n"
+            f"بعد از پرداخت، هش تراکنش رو با دستور زیر بفرست:\n"
+            f"<code>/verify YOUR_TX_HASH</code>",
             parse_mode="HTML"
         )
         return
