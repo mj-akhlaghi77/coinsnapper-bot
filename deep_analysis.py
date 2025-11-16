@@ -87,7 +87,7 @@ def call_openai_analysis(coin_data: dict) -> str:
     change_24h = coin_data.get("change_24h", 0)
     circulating_supply = coin_data.get("circulating_supply", 0)
     total_supply = coin_data.get("total_supply", 0)
-    max_supply = coin_data.get("max_supply", 0)
+    max_supply = coin_data.get("max_supply")
     rank = coin_data.get("rank", 0)
     description = (coin_data.get("description") or "")[:3000]
     website = coin_data.get("website", "ندارد")
@@ -96,7 +96,7 @@ def call_openai_analysis(coin_data: dict) -> str:
 
     contract_str = ", ".join([f"{c['network']}: {c['address']}" for c in contracts]) if contracts else "ندارد"
 
-      prompt = f"""
+    prompt = f"""
 تو یک تحلیلگر حرفه‌ای بازار کریپتو هستی. هر زمان یک ارز دیجیتال از تو خواسته شد، با توجه به اطلاعات که در انتها بهت داده میشه لطفاً بر اساس ساختار زیر یک معرفی کامل، روان، ساده و قابل فهم در حد 350 تا 450 کلمه ارائه بده. همچنین قبل از استفاده از نام نماد از کلمه رمزارز استفاده کن. متن باید کاملاً منظم و بخش‌بندی‌شده باشد و از لحن نیمه رسمی استفاده شود تا برای عموم و عوام جذاب باشد. همچنین انتهای جملات با فعل تمام شوند و هیچ‌گونه پیشنهاد خرید یا فروش نداشته باشد.
 
 ۱. معرفی کوتاه
@@ -148,8 +148,7 @@ def call_openai_analysis(coin_data: dict) -> str:
         return resp.json()["choices"][0]["message"]["content"].strip()
     except Exception as e:
         print(f"خطا در فراخوانی OpenAI: {e}")
-        return f"موقتی در دسترس نیست. بعداً امتحان کن."
-
+        return "موقتی در دسترس نیست. بعداً امتحان کن."
 def get_deep_analysis(coin_data: dict) -> str:
     """
     اصلی: اول کش → اگر نبود API → ذخیره در کش
