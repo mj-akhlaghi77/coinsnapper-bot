@@ -435,10 +435,10 @@ async def verify_tx(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 f"زمان: {to_shamsi(created_at)}\n\n"
                 f"ادمین‌ها: از دکمه‌های زیر استفاده کنید"
             )
-            keyboard = [
+             keyboard = [
                 [
-                    InlineKeyboardButton("تأیید", callback_data=f"admin_pay_approve:{payment_id}"),
-                    InlineKeyboardButton("رد", callback_data=f"admin_pay_reject:{payment_id}")
+                    InlineKeyboardButton("تأیید", callback_data=f"pay_ok:{payment_id}"),
+                    InlineKeyboardButton("رد", callback_data=f"pay_no:{payment_id}")
                 ]
             ]
             await context.bot.send_message(
@@ -742,7 +742,7 @@ async def main():
         app.add_handler(CommandHandler("check", check_subscription))
         app.add_handler(CommandHandler("verify", verify_tx))
 
-        app.add_handler(CallbackQueryHandler(admin_payment_callback, pattern=r"^admin_pay_"))
+       app.add_handler(CallbackQueryHandler(admin_payment_callback, pattern=r"^(pay_ok|pay_no):"))
         app.add_handler(CallbackQueryHandler(handle_details_callback, pattern=r"^details_"))
         app.add_handler(CallbackQueryHandler(handle_close_details, pattern=r"^close_details_"))
 
