@@ -10,7 +10,8 @@ from datetime import datetime, timedelta
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")  # یا هر API دیگه
 DATABASE_URL = os.getenv("DATABASE_URL")
 MODEL = "gpt-4o"  # یا gpt-4o, claude, gemini
-CACHE_DAYS = 1  # چند روز کش بشه؟
+#CACHE_DAYS = 1  # چند روز کش بشه؟
+CACHE_MINUTES = 1 # پیش‌فرض ۱ دقیقه
 
 def get_db_connection():
     return psycopg2.connect(DATABASE_URL, cursor_factory=DictCursor)
@@ -56,7 +57,8 @@ def save_analysis_to_cache(symbol: str, name: str, analysis: str):
     try:
         conn = get_db_connection()
         cur = conn.cursor()
-        expires_at = datetime.now() + timedelta(days=CACHE_DAYS)
+        #expires_at = datetime.now() + timedelta(days=CACHE_DAYS)
+        expires_at = datetime.now() + timedelta(minutes=CACHE_MINUTES)
         cur.execute("""
             INSERT INTO deep_analysis_cache (symbol, name, analysis_text, expires_at)
             VALUES (%s, %s, %s, %s)
@@ -153,7 +155,8 @@ def get_deep_analysis(coin_data: dict) -> str:
     # ۱. کش رو چک کن
     cached = get_cached_analysis(symbol)
     if cached:
-        return f"تحلیل عمیق {coin_data['name']} (از حافظه):\n\n{cached}"
+        #return f"تحلیل عمیق {coin_data['name']} (از حافظه):\n\n{cached}"
+        return f"تحلیل عمیق {coin_data['name']} (از کش - تا {CACHE_MINUTES} دقیقه):\n\n{cached}"
 
     # ۲. اگر کش نبود، API رو بزن
     print(f"تحلیل جدید برای {symbol} — فراخوانی API...")
