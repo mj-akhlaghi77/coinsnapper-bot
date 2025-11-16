@@ -425,7 +425,7 @@ async def verify_tx(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
     # ارسال به کانال INFO_CHANNEL
-    if INFO_CHANNEL:
+        if INFO_CHANNEL:
         try:
             txt = (
                 f"<b>تراکنش جدید ثبت شد</b>\n\n"
@@ -436,15 +436,16 @@ async def verify_tx(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 f"ادمین‌ها: از دکمه‌های زیر استفاده کنید"
             )
 
-                        keyboard = [
+            # دکمه‌ها — کوتاه و مطمئن
+            keyboard = [
                 [
                     InlineKeyboardButton("تأیید", callback_data=f"pay_ok:{payment_id}"),
                     InlineKeyboardButton("رد", callback_data=f"pay_no:{payment_id}")
                 ]
             ]
-             
+
             await context.bot.send_message(
-                chat_id=INFO_CHANNEL,
+                chat_id=int(INFO_CHANNEL),  # تبدیل به عدد
                 text=txt,
                 parse_mode="HTML",
                 reply_markup=InlineKeyboardMarkup(keyboard)
@@ -452,6 +453,9 @@ async def verify_tx(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except telegram.error.TelegramError as e:
             print(f"خطا در ارسال به کانال: {e}")
             await update.message.reply_text("هش ثبت شد، اما ارسال به ادمین با مشکل مواجه شد.")
+        except Exception as e:
+            print(f"خطای غیرمنتظره: {e}")
+            await update.message.reply_text("خطا در ارتباط با کانال.")
 
 
 # ====================== هندلر ادمین برای تأیید/رد پرداخت ======================
