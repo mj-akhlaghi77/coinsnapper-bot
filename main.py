@@ -73,6 +73,8 @@ def get_db_connection():
 def init_db():
     conn = get_db_connection()
     cur = conn.cursor()
+    
+    # جدول users — با ستون notified_3day
     cur.execute("""
         CREATE TABLE IF NOT EXISTS users (
             id SERIAL PRIMARY KEY,
@@ -83,6 +85,14 @@ def init_db():
             registered_at TIMESTAMP DEFAULT NOW()
         );
     """)
+    
+    # اگر جدول قبلاً ساخته شده و ستون نداره، اضافه کن
+    cur.execute("""
+        ALTER TABLE users 
+        ADD COLUMN IF NOT EXISTS notified_3day BOOLEAN DEFAULT FALSE;
+    """)
+
+    # جدول payments
     cur.execute("""
         CREATE TABLE IF NOT EXISTS payments (
             id SERIAL PRIMARY KEY,
@@ -94,6 +104,7 @@ def init_db():
             processed_at TIMESTAMP
         );
     """)
+    
     conn.commit()
     cur.close()
     conn.close()
