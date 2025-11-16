@@ -10,7 +10,7 @@ from datetime import datetime, timedelta
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")  # یا هر API دیگه
 DATABASE_URL = os.getenv("DATABASE_URL")
 MODEL = "gpt-4o"  # یا gpt-4o, claude, gemini
-CACHE_DAYS = 7  # چند روز کش بشه؟
+CACHE_DAYS = 1  # چند روز کش بشه؟
 
 def get_db_connection():
     return psycopg2.connect(DATABASE_URL, cursor_factory=DictCursor)
@@ -114,6 +114,7 @@ def call_openai_analysis(coin_data: dict) -> str:
 طول متن حدود ۱۵۰-۱۸۰ کلمه باشد.
 متن روان، پیوسته و بدون قطعه قطعه شدن باشد.
 توکنومیک ساده و روشن باشد، بدون کلمات «خلاصه» یا «دقیق» و بدون اشاره به وستینگ یا جزئیات آزادسازی توکن.
+.و لطفا قبل از استفاده از نام نماد از کلمه رمزارز استفاده کن
     """
 
     try:
