@@ -390,7 +390,7 @@ async def verify_tx(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     tx_hash = args[0].strip()
     if len(tx_hash) < 30:
-        await udpate.message.reply_text("هش تراکنش معتبر نیست. دوباره امتحان کن.")
+        await update.message.reply_text("هش تراکنش معتبر نیست. دوباره امتحان کن.")
         return
 
     # ذخیره در دیتابیس
@@ -424,7 +424,7 @@ async def verify_tx(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
     # ارسال به کانال INFO_CHANNEL
-        if INFO_CHANNEL:
+    if INFO_CHANNEL:
         try:
             txt = (
                 f"<b>تراکنش جدید ثبت شد</b>\n\n"
@@ -435,7 +435,6 @@ async def verify_tx(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 f"ادمین‌ها: از دکمه‌های زیر استفاده کنید"
             )
 
-            # دکمه‌ها — کوتاه و مطمئن
             keyboard = [
                 [
                     InlineKeyboardButton("تأیید", callback_data=f"pay_ok:{payment_id}"),
@@ -444,7 +443,7 @@ async def verify_tx(update: Update, context: ContextTypes.DEFAULT_TYPE):
             ]
 
             await context.bot.send_message(
-                chat_id=int(INFO_CHANNEL),  # تبدیل به عدد
+                chat_id=int(INFO_CHANNEL),
                 text=txt,
                 parse_mode="HTML",
                 reply_markup=InlineKeyboardMarkup(keyboard)
@@ -455,7 +454,6 @@ async def verify_tx(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except Exception as e:
             print(f"خطای غیرمنتظره: {e}")
             await update.message.reply_text("خطا در ارتباط با کانال.")
-
 
 # ====================== هندلر ادمین برای تأیید/رد پرداخت ======================
 async def admin_payment_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
