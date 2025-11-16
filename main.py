@@ -455,6 +455,12 @@ async def verify_tx(update: Update, context: ContextTypes.DEFAULT_TYPE):
             print(f"خطای غیرمنتظره: {e}")
             await update.message.reply_text("خطا در ارتباط با کانال.")
 
+
+async def admin_payment_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    print(f"دکمه کلیک شد: {update.callback_query.data}")  # لاگ
+    query = update.callback_query
+    await query.answer()
+    # ... بقیه کدها
 # ====================== هندلر ادمین برای تأیید/رد پرداخت ======================
 async def admin_payment_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
