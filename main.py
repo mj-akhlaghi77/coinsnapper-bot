@@ -458,98 +458,41 @@ async def admin_payment_callback(update: Update, context: ContextTypes.DEFAULT_T
     await query.answer()
     clicker_id = query.from_user.id
 
-    # فقط ادمین‌ها
     if clicker_id not in ADMIN_ID_LIST:
-        try:
-            await query.edit_message_text("شما دسترسی ادمین ندارید.")
-        except:
-            pass
+        await query.edit_message_text("شما ادمین نیستید.")
         return
 
     data = query.data
-    if ":" not in data:
-        return
-
     action, pid_str = data.split(":", 1)
     try:
         payment_id = int(pid_str)
-    except ValueError:
-        await query.edit_message_text("شناسه پرداخت نامعتبر است.")
+    except:
         return
 
-    # دریافت اطلاعات پرداخت
     conn = get_db_connection()
     cur = conn.cursor()
-    cur.execute("SELECT telegram_id, tx_hash, status FROM payments WHERE id = %s", (payment_id,))
+    cur.execute("SELECT telegram_id, status FROM payments WHERE id = %s", (payment_id,))
     rec = cur.fetchone()
-
-    if not rec:
+    if not rec or rec["status"] != "pending":
         cur.close()
         conn.close()
-        await query.edit_message_text(f"پرداخت #{payment_id} پیدا نشد.")
-        return
-
-    if rec["status"] != "pending":
-        cur.close()
-        conn.close()
-        await query.edit_message_text(f"این پرداخت قبلاً پردازش شده: {rec['status']}")
         return
 
     payer_id = rec["telegram_id"]
     now = datetime.now()
 
-    # تأیید پرداخت
-    if action == "admin_pay_approve":
+    if action == "pay_ok":
         new_expiry = activate_user_subscription(payer_id, days=30)
-        cur.execute("""
-            UPDATE payments SET status='approved', processed_at=%s, note=%s WHERE id=%s
-        """, (now, f"تأیید شده توسط ادمین {clicker_id}", payment_id))
+        cur.execute("UPDATE payments SET status='approved', processed_at=%s WHERE id=%s", (now, payment_id))
         conn.commit()
+        await query.edit_message_text(f"تأیید شد! اشتراک تا {to_shamsi(new_expiry)}")
+        await context.bot.send_message(payer_id, f"پرداخت تأیید شد!\nاشتراک تا {to_shamsi(new_expiry)} فعال شد")
 
-        try:
-            await query.edit_message_text(
-                f"پرداخت #{payment_id} تأیید شد\n"
-                f"کاربر: <code>{payer_id}</code>\n"
-                f"تمدید تا: {to_shamsi(new_expiry)}",
-                parse_mode="HTML"
-            )
-        except:
-            pass
-
-        try:
-            await context.bot.send_message(
-                chat_id=payer_id,
-                text=f"پرداختت تأیید شد!\n"
-                     f"اشتراک تا {to_shamsi(new_expiry)} فعال شد\n"
-                     f"از ربات لذت ببر"
-            )
-        except:
-            pass
-
-    # رد پرداخت
-    elif action == "admin_pay_reject":
-        cur.execute("""
-            UPDATE payments SET status='rejected', processed_at=%s, note=%s WHERE id=%s
-        """, (now, f"رد شده توسط ادمین {clicker_id}", payment_id))
+    elif action == "pay_no":
+        cur.execute("UPDATE payments SET status='rejected', processed_at=%s WHERE id=%s", (now, payment_id))
         conn.commit()
-
-        try:
-            await query.edit_message_text(
-                f"پرداخت #{payment_id} رد شد\n"
-                f"کاربر: <code>{payer_id}</code>",
-                parse_mode="HTML"
-            )
-        except:
-            pass
-
-        try:
-            await context.bot.send_message(
-                chat_id=payer_id,
-                text=f"متأسفانه پرداخت (#{payment_id}) معتبر نبود.\n"
-                     f"اگر فکر می‌کنی اشتباه شده، با ادمین تماس بگیر."
-            )
-        except:
-            pass
+        await query.edit_message_text("پرداخت رد شد.")
+        await context.bot.send_message(payer_id, "پرداخت معتبر نبود. با ادمین تماس بگیر.")
 
     cur.close()
     conn.close()
