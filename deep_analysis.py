@@ -149,6 +149,8 @@ def call_openai_analysis(coin_data: dict) -> str:
     except Exception as e:
         print(f"خطا در فراخوانی OpenAI: {e}")
         return "موقتی در دسترس نیست. بعداً امتحان کن."
+
+
 def get_deep_analysis(coin_data: dict) -> str:
     """
     اصلی: اول کش → اگر نبود API → ذخیره در کش
