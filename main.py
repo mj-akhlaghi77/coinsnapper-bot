@@ -740,26 +740,25 @@ async def main():
         init_cache_table()
         app = ApplicationBuilder().token(BOT_TOKEN).build()
 
-        # هندلرها
+        # هندلرها — همه با ۸ اسپیس
         app.add_handler(CommandHandler("start", start))
         app.add_handler(CommandHandler("check", check_subscription))
         app.add_handler(CommandHandler("verify", verify_tx))
 
-       app.add_handler(CallbackQueryHandler(admin_payment_callback, pattern=r"^(pay_ok|pay_no):"))
+        app.add_handler(MessageHandler(filters.Regex(r"^(وضعیت کلی بازار|بررسی اشتراک|اشتراک و پرداخت)$"), handle_keyboard_buttons))
+        app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & ~filters.Regex(r"^(وضعیت کلی بازار|بررسی اشتراک|اشتراک و پرداخت)$"), crypto_info))
+
+        app.add_handler(CallbackQueryHandler(admin_payment_callback, pattern=r"^(pay_ok|pay_no):"))
         app.add_handler(CallbackQueryHandler(handle_details_callback, pattern=r"^details_"))
         app.add_handler(CallbackQueryHandler(handle_close_details, pattern=r"^close_details_"))
-
-        # هندلر دکمه‌های کیبورد پایین
-        app.add_handler(MessageHandler(filters.Regex(r"^(وضعیت کلی بازار|بررسی اشتراک|اشتراک و پرداخت)$"), handle_keyboard_buttons))
-
-        # هندلر جستجوی ارز
-        app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & ~filters.Regex(r"^(وضعیت کلی بازار|بررسی اشتراک|اشتراک و پرداخت)$"), crypto_info))
 
         await set_bot_commands(app.bot)
         await check_and_select_api_key(app.bot)
 
         await app.initialize()
         await app.start()
+
+        # ... بقیه کدها
 
         retry = 0
         while retry < 3:
