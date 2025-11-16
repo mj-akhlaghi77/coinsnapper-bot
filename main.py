@@ -210,7 +210,7 @@ async def check_and_select_api_key(bot: Bot):
                                    text=f"کلید CMC تغییر کرد!\nاز کلید #{prev_index+1} به #{current_key_index+1} سوئیچ شد.\n{to_shamsi(datetime.now())}")
         except telegram.error.TelegramError:
             pass
-
+            
     return selected
 
 # -------------------------
