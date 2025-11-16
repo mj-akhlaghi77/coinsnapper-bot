@@ -435,12 +435,14 @@ async def verify_tx(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 f"زمان: {to_shamsi(created_at)}\n\n"
                 f"ادمین‌ها: از دکمه‌های زیر استفاده کنید"
             )
-             keyboard = [
+
+                        keyboard = [
                 [
                     InlineKeyboardButton("تأیید", callback_data=f"pay_ok:{payment_id}"),
                     InlineKeyboardButton("رد", callback_data=f"pay_no:{payment_id}")
                 ]
             ]
+             
             await context.bot.send_message(
                 chat_id=INFO_CHANNEL,
                 text=txt,
