@@ -580,7 +580,13 @@ async def handle_details_callback(update: Update, context: ContextTypes.DEFAULT_
         "contracts": [],
         "price": 0,
         "market_cap": 0,
-        "volume_24h": 0
+        "volume_24h": 0,
+        "change_1h": 0,
+        "change_24h": 0,
+        "circulating_supply": 0,
+        "total_supply": 0,
+        "max_supply": 0,
+        "rank": 0,
     }
 
     # دریافت اطلاعات از CMC
