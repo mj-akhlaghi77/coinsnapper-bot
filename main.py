@@ -761,16 +761,15 @@ async def send_pending_renewal_notifications(bot: Bot):
 
 
 # ====================== تحلیل تکنیکال TAAPI.IO + GPT-4o ======================
-# نسخه نهایی و ۱۰۰٪ کارکرده
 async def handle_technical_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
 
     symbol = query.data[len("ta_"):].upper()
 
-    loading = await query.edit_message_text(
-        "در حال دریافت داده‌های تکنیکال از TAAPI.IO و تحلیل هوش مصنوعی...\nلطفاً چند ثانیه صبر کنید",
-        parse_mode="MarkdownV2"
+    # پیام لودینگ ساده (بدون MarkdownV2)
+    loading_msg = await query.edit_message_text(
+        "در حال دریافت تحلیل تکنیکال...\nلطفاً صبر کنید",
     )
 
     try:
@@ -778,21 +777,13 @@ async def handle_technical_callback(update: Update, context: ContextTypes.DEFAUL
         analysis = await get_technical_analysis(symbol, context)
 
         keyboard = [[InlineKeyboardButton("بستن", callback_data="close_details")]]
-        await loading.edit_text(
+        await loading_msg.edit_text(
             text=analysis,
-            parse_mode="MarkdownV2",
-            disable_web_page_preview=True,
+            parse_mode=ParseMode.MARKDOWN_V2,
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
-
     except Exception as e:
-        error_msg = f"خطا در تحلیل تکنیکال:\n`{str(e)}`"
-        keyboard = [[InlineKeyboardButton("بستن", callback_data="close_details")]]
-        await loading.edit_text(
-            text=error_msg,
-            parse_mode="MarkdownV2",
-            reply_markup=InlineKeyboardMarkup(keyboard)
-        )
+        await loading_msg.edit_text(f"خطا: {str(e)}")
 # -------------------------
 # راه‌اندازی
 # -------------------------
