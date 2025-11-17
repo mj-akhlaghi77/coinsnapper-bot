@@ -770,7 +770,7 @@ async def handle_technical_callback(update: Update, context: ContextTypes.DEFAUL
 
     loading_msg = await query.edit_message_text(
         "در حال دریافت تحلیل تکنیکال...\nلطفاً صبر کنید",
-        parse_mode="MarkdownV2"
+        parse_mode="HTML"
     )
 
     try:
@@ -780,7 +780,7 @@ async def handle_technical_callback(update: Update, context: ContextTypes.DEFAUL
         keyboard = [[InlineKeyboardButton("بستن", callback_data="close_details")]]
         await loading_msg.edit_text(
             text=analysis,
-            parse_mode="MarkdownV2",
+            parse_mode="HTML",
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
     except Exception as e:
@@ -816,14 +816,6 @@ async def main():
 
         # ... بقیه کدها
 
-        retry = 0
-        while retry < 3:
-            try:
-                await app.updater.start_polling()
-                break
-            except telegram.error.Conflict:
-                retry += 1
-                await asyncio.sleep(3)
 
         scheduler = AsyncIOScheduler()
         scheduler.add_job(send_usage_report_to_channel, "interval", hours=1, args=[app.bot])
