@@ -91,28 +91,33 @@ def generate_technical_prompt(symbol: str, data: dict) -> str:
 
 
 async def get_technical_analysis(symbol: str, context=None):
-    """تابع اصلی که از main.py فراخوانی میشه"""
     data, error = get_technical_data(symbol)
 
     if not data or error:
         return f"تحلیل تکنیکال موقتاً در دسترس نیست.\nخطا: {error or 'دریافت داده'}"
 
+    # ساخت پرامپت حرفه‌ای
     prompt = generate_technical_prompt(symbol, data)
 
     try:
-        # فراخوانی GPT-4o (همون که قبلاً داشتی)
-        from deep_analysis import call_openai_analysis  # ایمپورت داخلی
-        raw_analysis = call_openai_analysis({"symbol": symbol, "name": symbol}, context)
+        # استفاده از همون سیستم deep_analysis (با کش و همه چی)
+        fake_coin = {
+            "symbol": symbol,
+            "name": symbol,
+            "description": prompt  # اینجا پرامپت تکنیکال رو می‌ذاریم
+        }
+        from deep_analysis import call_openai_analysis
+        raw_analysis = call_openai_analysis(fake_coin, context)
 
-        # تمیز کردن و بلد کردن عنوان‌ها
+        # بلد کردن عنوان‌ها + فرار کاراکترها
         import re
-        analysis = re.sub(r'(\d+\.\s*[^\n]+)', r'*\1*', raw_analysis)
+        def escape_v2(t): 
+            return ''.join('\\' + c if c in r'_*[]()~`>#+-=|{}.!' else c for c in t)
         
-        def escape_v2(text): 
-            return ''.join('\\' + c if c in r'_*[]()~`>#+-=|{}.!' else c for c in text)
+        analysis = re.sub(r'(\d+\.\s*[^\n]+)', r'*\1*', raw_analysis)
         analysis = escape_v2(analysis)
 
         return analysis
 
     except Exception as e:
-        return f"خطا در تولید تحلیل تکنیکال: {str(e)}"
+        return f"خطا در هوش مصنوعی:\n`{str(e)}`"
