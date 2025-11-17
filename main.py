@@ -709,9 +709,10 @@ async def crypto_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
   
 
         keyboard = [
-            [InlineKeyboardButton("اطلاعات تکمیلی", callback_data=f"details_{symbol}")],
-            [InlineKeyboardButton("تحلیل تکنیکال", callback_data=f"ta_{symbol}")],
-            [InlineKeyboardButton("بستن", callback_data="close_details")]
+            [
+                InlineKeyboardButton("اطلاعات تکمیلی", callback_data=f"details_{symbol}"),
+                InlineKeyboardButton("تحلیل تکنیکال ⚡", callback_data=f"ta_{symbol}"),
+            ]
         ]
         await update.message.reply_text(msg, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(keyboard))
 
@@ -764,7 +765,7 @@ async def handle_technical_callback(update: Update, context: ContextTypes.DEFAUL
     query = update.callback_query
     await query.answer()
 
-    symbol = query.data.replace("ta_", "").upper()  # ta_BTC → BTC
+    symbol = query.data[len("ta_"):].upper()  # ta_BTC → BTC  # ta_BTC → BTC
 
     # پیام موقت
     loading_msg = await query.edit_message_text(
@@ -780,7 +781,8 @@ async def handle_technical_callback(update: Update, context: ContextTypes.DEFAUL
         await loading_msg.edit_text(
             analysis,
             parse_mode="MarkdownV2",
-            disable_web_page_preview=True
+            disable_web_page_preview=True,
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("بستن", callback_data="close_details")]])
         )
     except Exception as e:
         await loading_msg.edit_text(f"خطا در دریافت تحلیل تکنیکال:\n`{str(e)}`", parse_mode="MarkdownV2")
