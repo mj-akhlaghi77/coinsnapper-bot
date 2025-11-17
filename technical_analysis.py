@@ -1,4 +1,5 @@
 # technical_analysis.py
+
 import os
 import requests
 from datetime import datetime
