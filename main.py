@@ -760,34 +760,43 @@ async def send_pending_renewal_notifications(bot: Bot):
         print(f"Error in send_pending_renewal_notifications: {e}")
 
 
-# ====================== تحلیل تکنیکال TAAPI.IO ======================
+# ====================== تحلیل تکنیکال TAAPI.IO + GPT-4o ======================
 async def handle_technical_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
 
-    symbol = query.data[len("ta_"):].upper()  # ta_BTC → BTC  # ta_BTC → BTC
+    # استخراج نماد (مثلاً ta_BTC → BTC)
+    symbol = query.data[len("ta_"):].upper()
 
-    # پیام موقت
-    loading_msg = await query.edit_message_text(
-        "در حال دریافت داده‌های تکنیکال از TAAPI.IO...\n"
-        "لطفاً چند ثانیه صبر کنید",
+    # پیام لودینگ اولیه
+    loading = await query.edit_message_text(
+        "در حال دریافت داده‌های تکنیکال از TAAPI.IO و تحلیل هوش مصنوعی...\n"
+        "لطفاً چند ثانیهیر صبر کنید",
         parse_mode="MarkdownV2"
     )
 
     try:
+        # دریافت تحلیل تکنیکال
         from technical_analysis import get_technical_analysis
         analysis = await get_technical_analysis(symbol, context)
 
-        await loading_msg.edit_text(
-            analysis,
+        # ارسال نتیجه نهایی + دکمه بستن
+        keyboard = [[InlineKeyboardButton("بستن", callback_data="close_details")]]
+        await loading.edit_text(
+            text=analysis,
             parse_mode="MarkdownV2",
             disable_web_page_preview=True,
-            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("بستن", callback_data="close_details")]])
+            reply_markup=InlineKeyboardMarkup(keyboard)
         )
+
     except Exception as e:
-        await loading_msg.edit_text(f"خطا در دریافت تحلیل تکنیکال:\n`{str(e)}`", parse_mode="MarkdownV2")
-
-
+        error_text = f"خطا در دریافت تحلیل تکنیکال:\n`{str(e)}`"
+        keyboard = [[InlineKeyboardButton("بستن", callback_data="close_details")]]
+        await loading.edit_text(
+            text=error_text,
+            parse_mode="MarkdownV2",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
 # -------------------------
 # راه‌اندازی
 # -------------------------
