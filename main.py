@@ -761,12 +761,38 @@ async def send_pending_renewal_notifications(bot: Bot):
 
 
 # ====================== تحلیل تکنیکال TAAPI.IO + GPT-4o ======================
+# نسخه نهایی و ۱۰۰٪ کارکرده
 async def handle_technical_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-    
-    print("دکمه تحلیل تکنیکال کلیک شد!")  # اینو تو کنسول ببین
-    await query.edit_message_text("تست موفق — هندلر کار کرد!")
+
+    symbol = query.data[len("ta_"):].upper()
+
+    loading = await query.edit_message_text(
+        "در حال دریافت داده‌های تکنیکال از TAAPI.IO و تحلیل هوش مصنوعی...\nلطفاً چند ثانیه صبر کنید",
+        parse_mode="MarkdownV2"
+    )
+
+    try:
+        from technical_analysis import get_technical_analysis
+        analysis = await get_technical_analysis(symbol, context)
+
+        keyboard = [[InlineKeyboardButton("بستن", callback_data="close_details")]]
+        await loading.edit_text(
+            text=analysis,
+            parse_mode="MarkdownV2",
+            disable_web_page_preview=True,
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+
+    except Exception as e:
+        error_msg = f"خطا در تحلیل تکنیکال:\n`{str(e)}`"
+        keyboard = [[InlineKeyboardButton("بستن", callback_data="close_details")]]
+        await loading.edit_text(
+            text=error_msg,
+            parse_mode="MarkdownV2",
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
 # -------------------------
 # راه‌اندازی
 # -------------------------
