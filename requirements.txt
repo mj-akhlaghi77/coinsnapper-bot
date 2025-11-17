@@ -6,3 +6,4 @@ asyncpg
 psycopg2-binary
 apscheduler
 jdatetime
+python-dotenv==1.0.1
