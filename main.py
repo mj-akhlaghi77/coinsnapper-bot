@@ -794,6 +794,9 @@ async def main():
         init_db()
         init_cache_table()
         app = ApplicationBuilder().token(BOT_TOKEN).build()
+        app.add_handler(...)
+        await app.run_polling()
+
 
         # هندلرها — همه با ۸ اسپیس
         app.add_handler(CommandHandler("start", start))
