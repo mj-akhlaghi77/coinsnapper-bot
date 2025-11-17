@@ -30,6 +30,7 @@ DATABASE_URL = os.getenv("DATABASE_URL")
 TRON_ADDRESS = os.getenv("TRON_ADDRESS")
 INFO_CHANNEL = os.getenv("INFO_CHANNEL")      # مثال: -100123...
 REPORT_CHANNEL = os.getenv("REPORT_CHANNEL")  # مثال: -100123...
+TAAPI_SECRET= os.getenv("TAAPI_SECRET")
 CMC_API_KEY_1 = os.getenv("CMC_API_KEY_1")
 CMC_API_KEY_2 = os.getenv("CMC_API_KEY_2")
 CMC_API_KEY_3 = os.getenv("CMC_API_KEY_3")
@@ -707,7 +708,11 @@ async def crypto_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
 """
   
 
-        keyboard = [[InlineKeyboardButton("اطلاعات تکمیلی", callback_data=f"details_{symbol}")]]
+        keyboard = [
+            [InlineKeyboardButton("اطلاعات تکمیلی", callback_data=f"details_{symbol}")],
+            [InlineKeyboardButton("تحلیل تکنیکال", callback_data=f"ta_{symbol}")],
+            [InlineKeyboardButton("بستن", callback_data="close_details")]
+        ]
         await update.message.reply_text(msg, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(keyboard))
 
     except Exception as e:
@@ -753,6 +758,34 @@ async def send_pending_renewal_notifications(bot: Bot):
     except Exception as e:
         print(f"Error in send_pending_renewal_notifications: {e}")
 
+
+# ====================== تحلیل تکنیکال TAAPI.IO ======================
+async def handle_technical_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+
+    symbol = query.data.replace("ta_", "").upper()  # ta_BTC → BTC
+
+    # پیام موقت
+    loading_msg = await query.edit_message_text(
+        "در حال دریافت داده‌های تکنیکال از TAAPI.IO...\n"
+        "لطفاً چند ثانیه صبر کنید",
+        parse_mode="MarkdownV2"
+    )
+
+    try:
+        from technical_analysis import get_technical_analysis
+        analysis = await get_technical_analysis(symbol, context)
+
+        await loading_msg.edit_text(
+            analysis,
+            parse_mode="MarkdownV2",
+            disable_web_page_preview=True
+        )
+    except Exception as e:
+        await loading_msg.edit_text(f"خطا در دریافت تحلیل تکنیکال:\n`{str(e)}`", parse_mode="MarkdownV2")
+
+
 # -------------------------
 # راه‌اندازی
 # -------------------------
@@ -774,6 +807,7 @@ async def main():
         app.add_handler(CallbackQueryHandler(admin_payment_callback, pattern=r"^(pay_ok|pay_no):"))
         app.add_handler(CallbackQueryHandler(handle_details_callback, pattern=r"^details_"))
         app.add_handler(CallbackQueryHandler(handle_close_details, pattern=r"^close_details_"))
+        app.add_handler(CallbackQueryHandler(handle_technical_callback, pattern=r"^ta_"))
 
         await set_bot_commands(app.bot)
         await check_and_select_api_key(app.bot)
