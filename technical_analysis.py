@@ -91,6 +91,15 @@ def generate_technical_prompt(symbol: str, data: dict) -> str:
 """
 
 
+def escape_markdown_v2(text: str) -> str:
+    """فقط کاراکترهای خطرناک رو فرار می‌ده — * و ** رو نه!"""
+    if not text:
+        return text
+    # فقط این کاراکترها رو فرار می‌دیم — * و _ و ** رو دست نمی‌زنیم!
+    escape_chars = r"\_[]()~`>#+-=|{}.!"
+    return ''.join('\\' + c if c in escape_chars else c for c in text)
+
+
 async def get_technical_analysis(symbol: str, context=None):
     data, error = get_technical_data(symbol)
 
@@ -109,27 +118,18 @@ async def get_technical_analysis(symbol: str, context=None):
         from deep_analysis import call_openai_analysis
         raw_analysis = call_openai_analysis(fake_coin, context)
 
-        # اول کل متن رو کامل escape کن
+        # مرحله ۱: فقط کاراکترهای خطرناک (مثل . و ! و |) رو فرار بده
         safe_text = escape_markdown_v2(raw_analysis)
 
-        # حالا فقط عنوان‌ها رو بلد کن (با * که امن هست)
+        # مرحله ۲: حالا با خیال راحت بلد کن — چون * و ** فرار نشدن!
+        safe_text = safe_text.replace("**", "*")  # همه **عنوان** → *عنوان*
+        
+        # شماره‌ها رو هم بلد کن (مثل 1. عنوان)
         import re
-        # پیدا کردن خطوطی که با ** شروع میشن یا شماره‌دار هستن
-        safe_text = re.sub(r'\*\*(.+?)\*\*', r'*\1*', safe_text)  # **عنوان** → *عنوان*
-        safe_text = re.sub(r'^(\d+\.\s+.+)',$r'* \1*', safe_text, flags=re.MULTILINE)  # 1. عنوان → * 1. عنوان *
+        safe_text = re.sub(r'(^|\n)([\d]+\.\s+.+)()', r'\1*\2*', safe_text)
 
         return safe_text
 
     except Exception as e:
-        error_msg = f"خطا در هوش مصنوعی:\n{str(e)}"
+        error_msg = f"خطا در هوش مصنوعی:\n`{str(e)}`"
         return escape_markdown_v2(error_msg)
-
-        # بلد کردن عنوان‌ها + فرار کاراکترها
-        import re
-        def escape_markdown_v2(text: str) -> str:
-    """فرار دادن همه کاراکترهای رزرو شده در MarkdownV2 تلگرام"""
-    if not text:
-        return text
-    # لیست کامل کاراکترهای رزرو شده در MarkdownV2
-    escape_chars = r'_[]()~`>#+-=|{}.!'
-    return ''.join('\\' + c if c in escape_chars else c for c in text)
