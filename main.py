@@ -761,15 +761,16 @@ async def send_pending_renewal_notifications(bot: Bot):
 
 
 # ====================== تحلیل تکنیکال TAAPI.IO + GPT-4o ======================
+
 async def handle_technical_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
 
     symbol = query.data[len("ta_"):].upper()
 
-    # پیام لودینگ ساده (بدون MarkdownV2)
     loading_msg = await query.edit_message_text(
         "در حال دریافت تحلیل تکنیکال...\nلطفاً صبر کنید",
+        parse_mode="MarkdownV2"
     )
 
     try:
@@ -779,7 +780,7 @@ async def handle_technical_callback(update: Update, context: ContextTypes.DEFAUL
         keyboard = [[InlineKeyboardButton("بستن", callback_data="close_details")]]
         await loading_msg.edit_text(
             text=analysis,
-            parse_mode=ParseMode.MARKDOWN_V2,
+            parse_mode="MarkdownV2",
             reply_markup=InlineKeyboardMarkup(keyboard)
         )
     except Exception as e:
