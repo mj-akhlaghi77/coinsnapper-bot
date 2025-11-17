@@ -30,7 +30,6 @@ DATABASE_URL = os.getenv("DATABASE_URL")
 TRON_ADDRESS = os.getenv("TRON_ADDRESS")
 INFO_CHANNEL = os.getenv("INFO_CHANNEL")      # مثال: -100123...
 REPORT_CHANNEL = os.getenv("REPORT_CHANNEL")  # مثال: -100123...
-TAAPI_SECRET= os.getenv("TAAPI_SECRET")
 CMC_API_KEY_1 = os.getenv("CMC_API_KEY_1")
 CMC_API_KEY_2 = os.getenv("CMC_API_KEY_2")
 CMC_API_KEY_3 = os.getenv("CMC_API_KEY_3")
@@ -708,12 +707,7 @@ async def crypto_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
 """
   
 
-        keyboard = [
-            [
-                InlineKeyboardButton("اطلاعات تکمیلی", callback_data=f"details_{symbol}"),
-                InlineKeyboardButton("تحلیل تکنیکال ⚡", callback_data=f"ta_{symbol}"),
-            ]
-        ]
+        keyboard = [[InlineKeyboardButton("اطلاعات تکمیلی", callback_data=f"details_{symbol}")]]
         await update.message.reply_text(msg, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(keyboard))
 
     except Exception as e:
@@ -759,32 +753,6 @@ async def send_pending_renewal_notifications(bot: Bot):
     except Exception as e:
         print(f"Error in send_pending_renewal_notifications: {e}")
 
-
-# ====================== تحلیل تکنیکال TAAPI.IO + GPT-4o ======================
-
-async def handle_technical_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-
-    symbol = query.data[len("ta_"):].upper()
-
-    loading_msg = await query.edit_message_text(
-        "در حال دریافت تحلیل تکنیکال...\nلطفاً صبر کنید",
-        parse_mode="HTML"
-    )
-
-    try:
-        from technical_analysis import get_technical_analysis
-        analysis = await get_technical_analysis(symbol, context)
-
-        keyboard = [[InlineKeyboardButton("بستن", callback_data="close_details")]]
-        await loading_msg.edit_text(
-            text=analysis,
-            parse_mode="HTML",
-            reply_markup=InlineKeyboardMarkup(keyboard)
-        )
-    except Exception as e:
-        await loading_msg.edit_text(f"خطا: {str(e)}")
 # -------------------------
 # راه‌اندازی
 # -------------------------
@@ -794,9 +762,6 @@ async def main():
         init_db()
         init_cache_table()
         app = ApplicationBuilder().token(BOT_TOKEN).build()
-        app.add_handler(...)
-        await app.run_polling()
-
 
         # هندلرها — همه با ۸ اسپیس
         app.add_handler(CommandHandler("start", start))
@@ -809,7 +774,6 @@ async def main():
         app.add_handler(CallbackQueryHandler(admin_payment_callback, pattern=r"^(pay_ok|pay_no):"))
         app.add_handler(CallbackQueryHandler(handle_details_callback, pattern=r"^details_"))
         app.add_handler(CallbackQueryHandler(handle_close_details, pattern=r"^close_details_"))
-        app.add_handler(CallbackQueryHandler(handle_technical_callback, pattern=r"^ta_"))
 
         await set_bot_commands(app.bot)
         await check_and_select_api_key(app.bot)
@@ -819,6 +783,14 @@ async def main():
 
         # ... بقیه کدها
 
+        retry = 0
+        while retry < 3:
+            try:
+                await app.updater.start_polling()
+                break
+            except telegram.error.Conflict:
+                retry += 1
+                await asyncio.sleep(3)
 
         scheduler = AsyncIOScheduler()
         scheduler.add_job(send_usage_report_to_channel, "interval", hours=1, args=[app.bot])
