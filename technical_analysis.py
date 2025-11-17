@@ -1,135 +1,161 @@
 # technical_analysis.py
-
 import os
 import requests
-from datetime import datetime
-import re
+import json
+from typing import Tuple, Dict, Any, Optional
+from dotenv import load_dotenv
 
-# تنظیمات TAAPI.IO
-TAAPI_SECRET = os.getenv("TAAPI_SECRET")  # حتماً در .env بذار
-TAAPI_BASE = "https://api.taapi.io"
+load_dotenv()
 
-# لیست اندیکاتورهای مهم (می‌تونی بعداً اضافه کنی)
+TAAPI_SECRET = os.getenv("TAAPI_SECRET")
+if not TAAPI_SECRET:
+    raise ValueError("TAAPI_SECRET در فایل .env تنظیم نشده است!")
+
+# لیست اندیکاتورهای مورد نیاز
 INDICATORS = [
-    {"indicator": "ema", "period": 50, "id": "EMA50"},
-    {"indicator": "ema", "period": 200, "id": "EMA200"},
-    {"indicator": "rsi", "period": 14, "id": "RSI"},
-    {"indicator": "macd", "id": "MACD"},
-    {"indicator": "supertrend", "period": 10, "multiplier": 3, "id": "ST"},
-    {"indicator": "bbands2", "period": 20, "id": "BB"},
-    {"indicator": "atr", "period": 14, "id": "ATR"},
-    {"indicator": "volume", "id": "VOLUME"},
+    "ema", "ema", "sma", "sma", "rsi", "macd", "stoch", "bbands", "supertrend", "ichimoku", "adx", "obv"
 ]
+PERIODS = {
+    "ema": [50, 200],
+    "sma": [50, 200],
+    "rsi": [14],
+    "macd": [None],
+    "stoch": [None],
+    "bbands": [None],
+    "supertrend": [None],
+    "ichimoku": [None],
+    "adx": [None],
+    "obv": [None]
+}
 
-def get_technical_data(symbol: str, timeframe: str = "4h"):
-    """دریافت همه اندیکاتورها از TAAPI.IO"""
-    if not TAAPI_SECRET:
-        return None, "کلید TAAPI.IO تنظیم نشده است."
+def get_technical_data(symbol: str) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
+    """دریافت داده‌های تکنیکال از TAAPI.IO"""
+    url = "https://api.taapi.io/bulk"
+    headers = {"Content-Type": "application/json"}
+    
+    queries = []
+    for indicator in INDICATORS:
+        if indicator in ["ema", "sma"]:
+            for period in PERIODS[indicator]:
+                queries.append({
+                    "indicator": indicator,
+                    "params": {"period": period},
+                    "id": f"{indicator.upper()}{period}"
+                })
+        else:
+            queries.append({
+                "indicator": indicator,
+                "id": indicator.upper()
+            })
 
-    symbol = symbol.upper() + "/USDT"
-    results = {}
-    errors = []
+    payload = {
+        "secret": TAAPI_SECRET,
+        "exchange": "binance",
+        "symbol": f"{symbol}/USDT",
+        "interval": "4h",
+        "indicators": queries
+    }
 
-    for ind in INDICATORS:
-        params = {
-            "secret": TAAPI_SECRET,
-            "exchange": "binance",
-            "symbol": symbol,
-            "interval": timeframe,
-            **{k: v for k, v in ind.items() if k != "id"}
-        }
-        try:
-            url = f"{TAAPI_BASE}/{ind['indicator']}"
-            resp = requests.get(url, params=params, timeout=15)
-            if resp.status_code == 200:
-                data = resp.json()
-                results[ind["id"]] = data
-            else:
-                errors.append(f"{ind['id']}: {resp.status_code}")
-        except Exception as e:
-            errors.append(f"{ind['id']}: {str(e)}")
+    try:
+        response = requests.post(url, json=payload, timeout=15)
+        if response.status_code != 200:
+            return None, f"خطای TAAPI: {response.status_code}"
 
-    error_msg = "\n".join(errors) if errors else None
-    return results, error_msg
+        data = response.json()
+        if "error" in data:
+            return None, f"خطای TAAPI: {data['error']}"
+
+        result = {}
+        for item in data:
+            key = item["id"]
+            value = item["result"]["value"] if "value" in item["result"] else item["result"]
+            result[key] = {"value": value}
+
+        return result, None
+
+    except requests.exceptions.RequestException as e:
+        return None, f"خطا در ارتباط با TAAPI: {str(e)}"
+    except Exception as e:
+        return None, f"خطای غیرمنتظره: {str(e)}"
 
 
-def generate_technical_prompt(symbol: str, data: dict) -> str:
-    """ساخت پرامپت حرفه‌ای برای GPT-4o"""
-    now = datetime.now().strftime("%Y-%m-%d %H:%M")
+def generate_technical_prompt(symbol: str, data: Dict[str, Any]) -> str:
+    """ساخت پرامپت حرفه‌ای برای GPT"""
+    price = data.get("EMA50", {}).get("value", "نامشخص")
+    ema50 = data.get("EMA50", {}).get("value", "نامشخص")
+    ema200 = data.get("EMA200", {}).get("value", "نامشخص")
+    rsi = data.get("RSI", {}).get("value", "نامشخص")
+    macd = data.get("MACD", {}).get("value", {})
+    supertrend = data.get("SUPERTREND", {}).get("value", "نامشخص")
 
     return f"""
-تو یک تحلیلگر تکنیکال حرفه‌ای پراپ تریدینگ هستی. فقط بر اساس داده‌های واقعی زیر یک تحلیل کامل، واضح و قابل اجرا بنویس.
-فقط از داده‌های زیر استفاده کن. هیچ حدس نزن.
-
-ارز: {symbol.upper()}/USDT
+نماد: {symbol}/USDT
 تایم‌فریم: 4 ساعته
-تاریخ: {now}
 
-داده‌ها:
-- قیمت فعلی: ${data.get('EMA50', {}).get('value', 'نامشخص'):.2f}
-- EMA50: {data.get('EMA50', {}).get('value', 'نامشخص')}
-- EMA200: {data.get('EMA200', {}).get('value', 'نامشخص')}
-- RSI(14): {data.get('RSI', {}).get('value', 'نامشخص'):.1f}
-- MACD: {data.get('MACD', {}).get('macd', 'نامشخص')} (Signal: {data.get('MACD', {}).get('signal', 'نامشخص')})
-- Supertrend: {'سبز (صعودی)' if data.get('ST', {}).get('value', 0) > 0 else 'قرمز (نزولی)'}
-- باند بولینگر: بالا {data.get('BB', {}).get('upper', 'نامشخص')} | پایین {data.get('BB', {}).get('lower', 'نامشخص')}
-- حجم ۲۴h: {data.get('VOLUME', {}).get('value', 'نامشخص'):,.0f}
+داده‌های فعلی:
+- قیمت فعلی: {price}
+- EMA50: {ema50}
+- EMA200: {ema200}
+- RSI(14): {rsi}
+- MACD: {macd}
+- Supertrend: {supertrend}
 
-ساختار خروجی (حتماً دقیقاً همین باشه):
-**تحلیل تکنیکال {symbol.upper()} (4h)**
+لطفاً یک تحلیل تکنیکال حرفه‌ای، کوتاه و دقیق بنویس که شامل این موارد باشد:
+1. روند کلی (صعودی/نزولی/رنج)
+2. وضعیت قیمت نسبت به EMA50 و EMA200
+3. وضعیت RSI و احتمال اشباع خرید/فروش
+4. سیگنال MACD
+5. وضعیت Supertrend
+6. سطوح کلیدی حمایت و مقاومت
+7. استراتژی پیشنهادی پراپ (ورود، استاپ، تارگت، R:R)
+8. ریسک فعلی
 
-**روند کلی**: صعودی / نزولی / رنج
-**وضعیت قیمت نسبت به EMA50 و EMA200**
-**وضعیت RSI و احتمال اشباع**
-**وضعیت MACD و سیگنال**
-**وضعیت Supertrend**
-**سطوح کلیدی حمایت و مقاومت** (حداکثر ۳ تا)
-**استراتژی پیشنهادی پراپ** (ورود، استاپ، تارگت، R:R)
-**ریسک فعلی**: کم / متوسط / زیاد
-
-از ایموجی‌های مرتبط استفاده کن. فقط تحلیل بنویس، نه مقدمه و نه نتیجه‌گیری اضافه.
+از ایموجی‌های مناسب استفاده کن و خروجی رو تمیز و مرتب بنویس.
+فقط تحلیل را بنویس، بدون مقدمه.
 """
 
 
 def escape_markdown_v2(text: str) -> str:
-    """فقط کاراکترهای خطرناک رو فرار می‌ده — * و ** رو نه!"""
+    """فرار دادن کاراکترهای رزرو شده در MarkdownV2 — بدون دست زدن به * و _"""
     if not text:
-        return text
-    # فقط این کاراکترها رو فرار می‌دیم — * و _ و ** رو دست نمی‌زنیم!
+        return ""
     escape_chars = r"\_[]()~`>#+-=|{}.!"
     return ''.join('\\' + c if c in escape_chars else c for c in text)
 
 
-async def get_technical_analysis(symbol: str, context=None):
+async def get_technical_analysis(symbol: str, context=None) -> str:
+    """تابع اصلی — تحلیل تکنیکال کامل با GPT"""
     data, error = get_technical_data(symbol)
 
-    if not data or error:
-        msg = f"تحلیل تکنیکال موقتاً در دسترس نیست.\nخطا: {error or 'دریافت داده'}"
-        return escape_markdown_v2(msg)
+    if error or not data:
+        return escape_markdown_v2(f"*تحلیل تکنیکال در دسترس نیست*\nخطا: `{error or 'داده دریافت نشد'}`")
 
     prompt = generate_technical_prompt(symbol, data)
 
     try:
-        fake_coin = {
-            "symbol": symbol,
-            "name": symbol,
-            "description": prompt
-        }
+        fake_coin = {"symbol": symbol, "name": symbol, "description": prompt}
         from deep_analysis import call_openai_analysis
         raw_analysis = call_openai_analysis(fake_coin, context)
 
-        # مرحله ۱: فقط کاراکترهای خطرناک (مثل . و ! و |) رو فرار بده
+        # مرحله ۱: فرار کاراکترهای خطرناک
         safe_text = escape_markdown_v2(raw_analysis)
 
-        # مرحله ۲: حالا با خیال راحت بلد کن — چون * و ** فرار نشدن!
-        safe_text = safe_text.replace("**", "*")  # همه **عنوان** → *عنوان*
-        
-        # شماره‌ها رو هم بلد کن (مثل 1. عنوان)
-        import re
-        safe_text = re.sub(r'(^|\n)([\d]+\.\s+.+)()', r'\1*\2*', safe_text)
+        # مرحله ۲: تبدیل ** به *
+        safe_text = safe_text.replace("**", "*")
 
-        return safe_text
+        # مرحله ۳: بلد کردن خطوط شماره‌دار (مثل 1. عنوان)
+        import re
+        lines = safe_text.split('\n')
+        final_lines = []
+        for line in lines:
+            stripped = line.strip()
+            if stripped and stripped[0].isdigit() and '.' in stripped[:6]:
+                line = "*" + line.strip() + "*"
+            final_lines.append(line)
+        final_text = '\n'.join(final_lines)
+
+        return final_text
 
     except Exception as e:
-        error_msg = f"خطا در هوش مصنوعی:\n`{str(e)}`"
+        error_msg = f"*خطا در تحلیل تکنیکال*\n`{str(e)[:100]}`"
         return escape_markdown_v2(error_msg)
