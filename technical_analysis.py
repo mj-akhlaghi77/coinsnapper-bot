@@ -95,37 +95,8 @@ async def get_technical_analysis(symbol: str, context=None):
     data, error = get_technical_data(symbol)
 
     if not data or error:
-        return f"تحلیل تکنیکال موقتاً در دسترس نیست.\nخطا: {error or 'دریافت داده'}"
-
-    # ساخت پرامپت حرفه‌ای
-    prompt = generate_technical_prompt(symbol, data)
-
-    try:
-        # استفاده از همون سیستم deep_analysis (با کش و همه چی)
-        fake_coin = {
-            "symbol": symbol,
-            "name": symbol,
-            "description": prompt  # اینجا پرامپت تکنیکال رو می‌ذاریم
-        }
-        from deep_analysis import call_openai_analysis
-        raw_analysis = call_openai_analysis(fake_coin, context)
-
-        # بلد کردن عنوان‌ها + فرار کاراکترها
-        import re
-        def escape_markdown_v2(text: str) -> str:
-    """
-    فرار دادن همه کاراکترهای رزرو شده در MarkdownV2
-    این تابع ۱۰۰٪ همه چیز رو امن می‌کنه
-    """
-    escape_chars = r"\_*[]()~`>#+-=|{}.!"
-    return ''.join('\\' + char if char in escape_chars else char for char in text)
-
-
-async def get_technical_analysis(symbol: str, context=None):
-    data, error = get_technical_data(symbol)
-
-    if not data or error:
-        return escape_markdown_v2(f"تحلیل تکنیکال موقتاً در دسترس نیست.\nخطا: {error or 'دریافت داده'}")
+        msg = f"تحلیل تکنیکال موقتاً در دسترس نیست.\nخطا: {error or 'دریافت داده'}"
+        return escape_markdown_v2(msg)
 
     prompt = generate_technical_prompt(symbol, data)
 
@@ -138,15 +109,27 @@ async def get_technical_analysis(symbol: str, context=None):
         from deep_analysis import call_openai_analysis
         raw_analysis = call_openai_analysis(fake_coin, context)
 
-        # اول همه کاراکترهای مشکل‌دار رو فرار بده
-        analysis = escape_markdown_v2(raw_analysis)
+        # اول کل متن رو کامل escape کن
+        safe_text = escape_markdown_v2(raw_analysis)
 
         # حالا فقط عنوان‌ها رو بلد کن (با * که امن هست)
         import re
-        analysis = re.sub(r'(\d+\.\s*[^\n]+)', r'*\1*', analysis)
+        # پیدا کردن خطوطی که با ** شروع میشن یا شماره‌دار هستن
+        safe_text = re.sub(r'\*\*(.+?)\*\*', r'*\1*', safe_text)  # **عنوان** → *عنوان*
+        safe_text = re.sub(r'^(\d+\.\s+.+)',$r'* \1*', safe_text, flags=re.MULTILINE)  # 1. عنوان → * 1. عنوان *
 
-        return analysis
+        return safe_text
 
     except Exception as e:
-        error_text = f"خطا در هوش مصنوعی:\n`{str(e)}`"
-        return escape_markdown_v2(error_text)
+        error_msg = f"خطا در هوش مصنوعی:\n{str(e)}"
+        return escape_markdown_v2(error_msg)
+
+        # بلد کردن عنوان‌ها + فرار کاراکترها
+        import re
+        def escape_markdown_v2(text: str) -> str:
+    """فرار دادن همه کاراکترهای رزرو شده در MarkdownV2 تلگرام"""
+    if not text:
+        return text
+    # لیست کامل کاراکترهای رزرو شده در MarkdownV2
+    escape_chars = r'_[]()~`>#+-=|{}.!'
+    return ''.join('\\' + c if c in escape_chars else c for c in text)
