@@ -70,8 +70,16 @@ def get_taapi_data(symbol: str):
     if not TAAPI_SECRET:
         return None, "کلید TAAPI.IO تنظیم نشده است."
 
-    # ساختار جدید و رسمی TAAPI.IO (نوامبر ۲۰۲۵)
+    symbol = symbol.upper()
+
+    # فقط جفت‌های پشتیبانی‌شده در پلن رایگان
+    if symbol not in ["BTC", "ETH", "XRP", "LTC", "XMR"]:
+        return None, f"تحلیل تکنیکال فقط برای BTC, ETH, XRP, LTC, XMR در پلن رایگان در دسترسه.\nنماد: {symbol} پشتیبانی نمی‌شه."
+
     construct = {
+        "exchange": "binance",
+        "symbol": f"{symbol}/USDT",
+        "interval": "1h",
         "indicators": [
             {"id": "rsi", "indicator": "rsi", "period": 14},
             {"id": "macd", "indicator": "macd"},
@@ -88,9 +96,6 @@ def get_taapi_data(symbol: str):
     url = "https://api.taapi.io/bulk"
     payload = {
         "secret": TAAPI_SECRET,
-        "exchange": "binance",
-        "symbol": f"{symbol}/USDT",
-        "interval": "1h",
         "construct": construct
     }
 
@@ -99,7 +104,6 @@ def get_taapi_data(symbol: str):
         resp.raise_for_status()
         raw_data = resp.json()
 
-        # بررسی خطا
         if "error" in raw_data:
             return None, f"خطا در TAAPI: {raw_data['error']}"
 
@@ -112,23 +116,25 @@ def get_taapi_data(symbol: str):
                     results[key] = value["value"]
                 else:
                     # برای MACD و BBands که چند مقدار دارن
-                    results.update(value)
+                    results.update({f"{key}_{k}": v for k, v in value.items() if k in ["macd", "signal", "histogram", "upper", "middle", "lower"]})
             else:
                 results[key] = value
 
-        # اطمینان از وجود مقادیر مهم
+        # مقداردهی پیش‌فرض برای پرامپت
         results.setdefault("rsi", "نامشخص")
         results.setdefault("macd", "نامشخص")
         results.setdefault("ema50", "نامشخص")
         results.setdefault("ema200", "نامشخص")
+        results.setdefault("bb_middle", "نامشخص")
 
         return results, None
 
     except requests.exceptions.HTTPError as e:
         try:
-            err_msg = e.response.json().get("error") or e.response.text
+            err_json = e.response.json()
+            err_msg = err_json.get("error") or err_json.get("errors", [""])[0]
         except:
-            err_msg = str(e.response.text)
+            err_msg = e.response.text
         return None, f"خطا در TAAPI: {e.response.status_code} - {err_msg}"
     except Exception as e:
         return None, f"خطا در ارتباط با TAAPI: {str(e)}"
