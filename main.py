@@ -21,6 +21,7 @@ import telegram.error
 import psycopg2
 from psycopg2.extras import DictCursor
 from deep_analysis import get_deep_analysis, init_cache_table
+from technical_analysis import get_technical_analysis, init_tech_cache_table
 
 # -------------------------
 # تنظیمات محیطی
@@ -707,7 +708,8 @@ async def crypto_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
 """
   
 
-        keyboard = [[InlineKeyboardButton("اطلاعات تکمیلی", callback_data=f"details_{symbol}")]]
+        keyboard = [[InlineKeyboardButton("اطلاعات تکمیلی", callback_data=f"details_{symbol}"),
+                    InlineKeyboardButton("تحلیل تکنیکال", callback_data=f"tech_{symbol}")]]
         await update.message.reply_text(msg, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(keyboard))
 
     except Exception as e:
@@ -753,6 +755,48 @@ async def send_pending_renewal_notifications(bot: Bot):
     except Exception as e:
         print(f"Error in send_pending_renewal_notifications: {e}")
 
+
+
+# تابع جدید (تحلیل تکنیکال)
+async def handle_tech_analysis(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    user_id = query.from_user.id
+    subscribed, _ = check_subscription_status(user_id)
+
+    if not subscribed:
+        await query.message.reply_text("تحلیل تکنیکال فقط برای مشترکین فعاله 🚫")
+        return
+
+    symbol = query.data[len("tech_"):].upper()
+
+    loading = await query.message.reply_text("در حال دریافت داده‌های تکنیکال از TAAPI و تحلیل توسط هوش مصنوعی... ⏳")
+
+    analysis = get_technical_analysis(symbol)
+
+    try:
+        await loading.delete()
+    except:
+        pass
+
+    keyboard = [[InlineKeyboardButton("بستن", callback_data=f"close_tech_{symbol.lower()}")]]
+    await query.message.reply_text(
+        analysis,
+        parse_mode="HTML",
+        reply_markup=InlineKeyboardMarkup(keyboard),
+        disable_web_page_preview=True
+    )
+
+# هندلر بستن تحلیل تکنیکال
+async def handle_close_tech(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    try:
+        await query.message.delete()
+    except:
+        pass
+
+
 # -------------------------
 # راه‌اندازی
 # -------------------------
@@ -761,6 +805,7 @@ async def main():
         print("راه‌اندازی ربات...")
         init_db()
         init_cache_table()
+        init_tech_cache_table()
         app = ApplicationBuilder().token(BOT_TOKEN).build()
 
         # هندلرها — همه با ۸ اسپیس
@@ -774,6 +819,8 @@ async def main():
         app.add_handler(CallbackQueryHandler(admin_payment_callback, pattern=r"^(pay_ok|pay_no):"))
         app.add_handler(CallbackQueryHandler(handle_details_callback, pattern=r"^details_"))
         app.add_handler(CallbackQueryHandler(handle_close_details, pattern=r"^close_details_"))
+        app.add_handler(CallbackQueryHandler(handle_tech_analysis, pattern=r"^tech_"))
+        app.add_handler(CallbackQueryHandler(handle_close_tech, pattern=r"^close_tech_"))
 
         await set_bot_commands(app.bot)
         await check_and_select_api_key(app.bot)
