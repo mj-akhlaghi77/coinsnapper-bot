@@ -70,19 +70,19 @@ def get_taapi_data(symbol: str):
     if not TAAPI_SECRET:
         return None, "کلید TAAPI.IO تنظیم نشده است."
 
-    # مهم: حالا باید construct داشته باشه!
+    # ساختار جدید و رسمی TAAPI.IO (نوامبر ۲۰۲۵)
     construct = {
-        "indicators": {
-            "rsi": {"indicator": "rsi", "period": 14},
-            "macd": {"indicator": "macd"},
-            "ema50": {"indicator": "ema", "period": 50},
-            "ema200": {"indicator": "ema", "period": 200},
-            "bbands": {"indicator": "bbands2"},
-            "stoch": {"indicator": "stoch"},
-            "adx": {"indicator": "adx"},
-            "atr": {"indicator": "atr"},
-            "volume": {"indicator": "volume"}
-        }
+        "indicators": [
+            {"id": "rsi", "indicator": "rsi", "period": 14},
+            {"id": "macd", "indicator": "macd"},
+            {"id": "ema50", "indicator": "ema", "period": 50},
+            {"id": "ema200", "indicator": "ema", "period": 200},
+            {"id": "bbands", "indicator": "bbands2", "period": 20},
+            {"id": "stoch", "indicator": "stoch"},
+            {"id": "adx", "indicator": "adx"},
+            {"id": "atr", "indicator": "atr"},
+            {"id": "volume", "indicator": "volume"}
+        ]
     }
 
     url = "https://api.taapi.io/bulk"
@@ -95,37 +95,41 @@ def get_taapi_data(symbol: str):
     }
 
     try:
-        resp = requests.post(url, json=payload, timeout=15)
+        resp = requests.post(url, json=payload, timeout=20)
         resp.raise_for_status()
-        data = resp.json()
+        raw_data = resp.json()
 
-        # خروجی حالا فرق داره! باید از داخل construct بکشیم بیرون
+        # بررسی خطا
+        if "error" in raw_data:
+            return None, f"خطا در TAAPI: {raw_data['error']}"
+
+        data = raw_data.get("data", {})
+
         results = {}
-        for key, item in data.get("data", {}).items():
-            if isinstance(item, dict) and "value" in item:
-                results[key] = item["value"]
-            # برای MACD که چند مقدار داره
-            elif key == "macd" and isinstance(item, dict):
-                results["macd"] = item.get("macd")
-                results["macd_signal"] = item.get("signal")
-                results["macd_histogram"] = item.get("histogram")
+        for key, value in data.items():
+            if isinstance(value, dict):
+                if "value" in value:
+                    results[key] = value["value"]
+                else:
+                    # برای MACD و BBands که چند مقدار دارن
+                    results.update(value)
+            else:
+                results[key] = value
 
-        # برای بولینگر باند
-        if "bbands" in data.get("data", {}):
-            bb = data["data"]["bbands"]
-            results["bb_upper"] = bb.get("upper")
-            results["bb_middle"] = bb.get("middle")
-            results["bb_lower"] = bb.get("lower")
+        # اطمینان از وجود مقادیر مهم
+        results.setdefault("rsi", "نامشخص")
+        results.setdefault("macd", "نامشخص")
+        results.setdefault("ema50", "نامشخص")
+        results.setdefault("ema200", "نامشخص")
 
         return results, None
 
     except requests.exceptions.HTTPError as e:
-        if e.response.status_code == 400:
-            error_msg = e.response.json().get("errors", [str(e.response.text)])[0]
-            return None, f"خطا در TAAPI: 400 - {error_msg}"
-        if e.response.status_code == 401:
-            return None, "کلید TAAPI معتبر نیست یا منقضی شده."
-        return None, f"خطا در TAAPI: {e.response.status_code}"
+        try:
+            err_msg = e.response.json().get("error") or e.response.text
+        except:
+            err_msg = str(e.response.text)
+        return None, f"خطا در TAAPI: {e.response.status_code} - {err_msg}"
     except Exception as e:
         return None, f"خطا در ارتباط با TAAPI: {str(e)}"
 
