@@ -72,9 +72,9 @@ def get_taapi_data(symbol: str):
 
     symbol = symbol.upper()
 
-    # فقط جفت‌های پشتیبانی‌شده در پلن رایگان
+    # فقط کوین‌های رایگان
     if symbol not in ["BTC", "ETH", "XRP", "LTC", "XMR"]:
-        return None, f"تحلیل تکنیکال فقط برای BTC, ETH, XRP, LTC, XMR در پلن رایگان در دسترسه.\nنماد: {symbol} پشتیبانی نمی‌شه."
+        return None, f"در پلن رایگان فقط BTC، ETH، XRP، LTC و XMR پشتیبانی می‌شن.\n{symbol} فعلاً در دسترس نیست."
 
     construct = {
         "exchange": "binance",
@@ -102,43 +102,68 @@ def get_taapi_data(symbol: str):
     try:
         resp = requests.post(url, json=payload, timeout=20)
         resp.raise_for_status()
-        raw_data = resp.json()
+        raw = resp.json()
 
-        if "error" in raw_data:
-            return None, f"خطا در TAAPI: {raw_data['error']}"
+        # بررسی خطا
+        if "error" in raw:
+            return None, f"خطا در TAAPI: {raw['error']}"
 
-        data = raw_data.get("data", {})
+        data = raw.get("data")
 
+        # مهم: گاهی data لیست هست، گاهی دیکشنری!
         results = {}
-        for key, value in data.items():
-            if isinstance(value, dict):
-                if "value" in value:
-                    results[key] = value["value"]
+
+        if isinstance(data, list):
+            # حالت لیست (جدیدترین رفتار TAAPI)
+            for item in data:
+                if "id" in item and "result" in item:
+                    result = item["result"]
+                    key_id = item["id"]
+                    if isinstance(result, dict):
+                        if "value" in result:
+                            results[key_id] = result["value"]
+                        else:
+                            # MACD, BBands و ...
+                            for subkey, subval in result.items():
+                                results[f"{key_id}_{subkey}"] = subval
+                    else:
+                        results[key_id] = result
+        elif isinstance(data, dict):
+            # حالت قدیمی دیکشنری
+            for key_id, result in data.items():
+                if isinstance(result, dict):
+                    if "value" in result:
+                        results[key_id] = result["value"]
+                    else:
+                        for subkey, subval in result.items():
+                            results[f"{key_id}_{subkey}"] = subval
                 else:
-                    # برای MACD و BBands که چند مقدار دارن
-                    results.update({f"{key}_{k}": v for k, v in value.items() if k in ["macd", "signal", "histogram", "upper", "middle", "lower"]})
-            else:
-                results[key] = value
+                    results[key_id] = result
+        else:
+            return None, "خروجی TAAPI نامعتبر بود."
 
         # مقداردهی پیش‌فرض برای پرامپت
         results.setdefault("rsi", "نامشخص")
         results.setdefault("macd", "نامشخص")
+        results.setdefault("macd_signal", "نامشخص")
         results.setdefault("ema50", "نامشخص")
         results.setdefault("ema200", "نامشخص")
-        results.setdefault("bb_middle", "نامشخص")
+        results.setdefault("bbands_middle", "نامشخص")
+        results.setdefault("bbands_upper", "نامشخص")
+        results.setdefault("bbands_lower", "نامشخص")
 
         return results, None
 
     except requests.exceptions.HTTPError as e:
         try:
-            err_json = e.response.json()
-            err_msg = err_json.get("error") or err_json.get("errors", [""])[0]
+            err = e.response.json()
+            msg = err.get("error") or str(err)
         except:
-            err_msg = e.response.text
-        return None, f"خطا در TAAPI: {e.response.status_code} - {err_msg}"
+            msg = e.response.text
+        return None, f"خطا در TAAPI: {e.response.status_code} - {msg}"
     except Exception as e:
         return None, f"خطا در ارتباط با TAAPI: {str(e)}"
-
+        
 def generate_technical_analysis(symbol: str, ta_data: dict) -> str:
     if not OPENAI_API_KEY:
         return "کلید ChatGPT تنظیم نشده است."
