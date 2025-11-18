@@ -70,36 +70,62 @@ def get_taapi_data(symbol: str):
     if not TAAPI_SECRET:
         return None, "کلید TAAPI.IO تنظیم نشده است."
 
+    # مهم: حالا باید construct داشته باشه!
+    construct = {
+        "indicators": {
+            "rsi": {"indicator": "rsi", "period": 14},
+            "macd": {"indicator": "macd"},
+            "ema50": {"indicator": "ema", "period": 50},
+            "ema200": {"indicator": "ema", "period": 200},
+            "bbands": {"indicator": "bbands2"},
+            "stoch": {"indicator": "stoch"},
+            "adx": {"indicator": "adx"},
+            "atr": {"indicator": "atr"},
+            "volume": {"indicator": "volume"}
+        }
+    }
+
     url = "https://api.taapi.io/bulk"
-    headers = {"Authorization": f"Bearer {TAAPI_SECRET}"}
-    params = {
-        "secret": TAAPI_SECRET,  # بعضی وقتا لازم داره
+    payload = {
+        "secret": TAAPI_SECRET,
         "exchange": "binance",
         "symbol": f"{symbol}/USDT",
         "interval": "1h",
-        "indicators": [
-            {"indicator": "rsi", "params": {"period": 14}},
-            {"indicator": "macd"},
-            {"indicator": "ema", "params": {"period": 50}},
-            {"indicator": "ema", "params": {"period": 200}},
-            {"indicator": "bbands2"},
-            {"indicator": "stoch"},
-            {"indicator": "adx"},
-            {"indicator": "atr"},
-            {"indicator": "volume"}
-        ]
+        "construct": construct
     }
 
     try:
-        resp = requests.post(url, json=params, timeout=15)
-        if resp.status_code == 401:
-            return None, "کلید TAAPI معتبر نیست یا منقضی شده."
-        if resp.status_code != 200:
-            return None, f"خطا در TAAPI: {resp.status_code} - {resp.text}"
-
+        resp = requests.post(url, json=payload, timeout=15)
+        resp.raise_for_status()
         data = resp.json()
-        results = {item["id"]: item["result"]["value"] for item in data if "result" in item and "value" in item["result"]}
+
+        # خروجی حالا فرق داره! باید از داخل construct بکشیم بیرون
+        results = {}
+        for key, item in data.get("data", {}).items():
+            if isinstance(item, dict) and "value" in item:
+                results[key] = item["value"]
+            # برای MACD که چند مقدار داره
+            elif key == "macd" and isinstance(item, dict):
+                results["macd"] = item.get("macd")
+                results["macd_signal"] = item.get("signal")
+                results["macd_histogram"] = item.get("histogram")
+
+        # برای بولینگر باند
+        if "bbands" in data.get("data", {}):
+            bb = data["data"]["bbands"]
+            results["bb_upper"] = bb.get("upper")
+            results["bb_middle"] = bb.get("middle")
+            results["bb_lower"] = bb.get("lower")
+
         return results, None
+
+    except requests.exceptions.HTTPError as e:
+        if e.response.status_code == 400:
+            error_msg = e.response.json().get("errors", [str(e.response.text)])[0]
+            return None, f"خطا در TAAPI: 400 - {error_msg}"
+        if e.response.status_code == 401:
+            return None, "کلید TAAPI معتبر نیست یا منقضی شده."
+        return None, f"خطا در TAAPI: {e.response.status_code}"
     except Exception as e:
         return None, f"خطا در ارتباط با TAAPI: {str(e)}"
 
