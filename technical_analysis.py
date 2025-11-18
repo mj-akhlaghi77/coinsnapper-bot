@@ -108,49 +108,44 @@ def get_taapi_data(symbol: str):
         if "error" in raw:
             return None, f"خطا در TAAPI: {raw['error']}"
 
-        data = raw.get("data")
+        data = raw.get("data", [])
 
-        # مهم: گاهی data لیست هست، گاهی دیکشنری!
+        # حالا فقط و فقط حالت لیست (رفتار جدید TAAPI از ۲۰۲۵ به بعد)
+        if not isinstance(data, list):
+            return None, "خروجی TAAPI نامعتبر بود (باید لیست باشه!)."
+
         results = {}
 
-        if isinstance(data, list):
-            # حالت لیست (جدیدترین رفتار TAAPI)
-            for item in data:
-                if "id" in item and "result" in item:
-                    result = item["result"]
-                    key_id = item["id"]
-                    if isinstance(result, dict):
-                        if "value" in result:
-                            results[key_id] = result["value"]
-                        else:
-                            # MACD, BBands و ...
-                            for subkey, subval in result.items():
-                                results[f"{key_id}_{subkey}"] = subval
-                    else:
-                        results[key_id] = result
-        elif isinstance(data, dict):
-            # حالت قدیمی دیکشنری
-            for key_id, result in data.items():
-                if isinstance(result, dict):
-                    if "value" in result:
-                        results[key_id] = result["value"]
-                    else:
-                        for subkey, subval in result.items():
-                            results[f"{key_id}_{subkey}"] = subval
-                else:
-                    results[key_id] = result
-        else:
-            return None, "خروجی TAAPI نامعتبر بود."
+        for item in data:
+            key_id = item.get("id")
+            result = item.get("result")
 
-        # مقداردهی پیش‌فرض برای پرامپت
-        results.setdefault("rsi", "نامشخص")
-        results.setdefault("macd", "نامشخص")
-        results.setdefault("macd_signal", "نامشخص")
-        results.setdefault("ema50", "نامشخص")
-        results.setdefault("ema200", "نامشخص")
-        results.setdefault("bbands_middle", "نامشخص")
-        results.setdefault("bbands_upper", "نامشخص")
-        results.setdefault("bbands_lower", "نامشخص")
+            if key_id is None or result is None:
+                continue
+
+            if isinstance(result, dict):
+                if "value" in result:  # RSI, EMA, ADX و ...
+                    results[key_id] = result["value"]
+                else:
+                    # MACD, BBands, Stoch و ...
+                    for subkey, subval in result.items():
+                        results[f"{key_id}_{subkey}".lower()] = subval
+            else:
+                results[key_id] = result
+
+        # مقداردهی پیش‌فرض برای پرامپت (کلیدها رو دقیقاً مثل پرامپت تنظیم کردیم)
+        results.setdefault("rsi", None)
+        results.setdefault("macd_macd", None)
+        results.setdefault("macd_signal", None)
+        results.setdefault("ema50", None)
+        results.setdefault("ema200", None)
+        results.setdefault("bbands_middle", None)
+        results.setdefault("bbands_upper", None)
+        results.setdefault("bbands_lower", None)
+        results.setdefault("stoch_k", None)
+        results.setdefault("adx", None)
+        results.setdefault("atr", None)
+        results.setdefault("volume", None)
 
         return results, None
 
@@ -175,11 +170,12 @@ def generate_technical_analysis(symbol: str, ta_data: dict) -> str:
 
     نماد: {symbol}/USDT
     RSI(14): {ta_data.get('rsi', 'نامشخص')}
-    MACD: {ta_data.get('macd', 'نامشخص')} (سیگنال: {ta_data.get('macd_signal', 'نامشخص')})
-    EMA50: {ta_data.get('ema_50', 'نامشخص')}
-    EMA200: {ta_data.get('ema_200', 'نامشخص')}
-    باند بولینگر (میانی): {ta_data.get('bbands2_middle', 'نامشخص')}
-    قیمت فعلی: نزدیک به این باندها
+    MACD: {ta_data.get('macd_macd', 'نامشخص')} (سیگنال: {ta_data.get('macd_signal', 'نامشخص')})
+    EMA50: {ta_data.get('ema50', 'نامشخص')}
+    EMA200: {ta_data.get('ema200', 'نامشخص')}
+    باند بولینگر (میانی): {ta_data.get('bbands_middle', 'نامشخص')}
+    باند بولینگر (بالا): {ta_data.get('bbands_upper', 'نامشخص')}
+    باند بولینگر (پایین): {ta_data.get('bbands_lower', 'نامشخص')}
     Stochastic %K: {ta_data.get('stoch_k', 'نامشخص')}
     ADX: {ta_data.get('adx', 'نامشخص')}
     ATR: {ta_data.get('atr', 'نامشخص')}
