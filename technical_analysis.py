@@ -185,7 +185,7 @@ def generate_technical_analysis(symbol: str, ta_data: dict) -> str:
     قوانین خیلی مهم:
     - هیچ کلمه‌ای را بولد نکن، از ** یا * یا # یا markdown استفاده نکن.
     - عنوان‌ها را کاملاً ساده و بدون هیچ علامتی بنویس (مثلاً: تحلیل تکنیکال BTC/USDT)
-    - برای اینکه متن فارسی در تلگرام بهم نریزد، هر خطی که عدد یا کلمه انگلیسی دارد، قبل از عدد/کلمه انگلیسی یک نیم‌فاصله غیرقابل شکست (Zero-Width Joiner) بذار.
+    - قبل از هر عبارت انگلیسی که شرپع کننده جمله هست لطفا معادل فارسی آن را بنویس 
     - برای این کار از این کاراکتر استفاده کن: ‌ (این کاراکتر نامرئی است و بین حروف فارسی و انگلیسی می‌ذاری تا جهت متن خراب نشود)
 
     قالب خروجی دقیقاً این باشد:
@@ -222,7 +222,21 @@ def generate_technical_analysis(symbol: str, ta_data: dict) -> str:
         }
         resp = requests.post("https://api.openai.com/v1/chat/completions", json=payload, headers=headers, timeout=40)
         resp.raise_for_status()
-        return resp.json()["choices"][0]["message"]["content"].strip()
+        
+        analysis = resp.json()["choices"][0]["message"]["content"].strip()
+        
+        # حذف کامل هر نوع markdown احتمالی (حتی اگه GPT یادش رفته باشه!)
+        cleanup_map = str.maketrans({
+            '*': '', '**': '', '_': '', '#': '', '`': '', '[': '', ']': '', '(': '', ')': '',
+            '<': '', '>': '', '~': ''
+        })
+        analysis = analysis.translate(cleanup_map)
+        
+        # حذف خطوط خالی اضافی
+        lines = [line.rstrip() for line in analysis.split('\n') if line.strip()]
+        analysis = '\n'.join(lines)
+        
+        return analysis
     except Exception as e:
         return f"خطا در تولید تحلیل تکنیکال: {str(e)}"
 
