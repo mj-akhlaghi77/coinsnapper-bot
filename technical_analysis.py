@@ -224,19 +224,18 @@ def generate_technical_analysis(symbol: str, ta_data: dict) -> str:
         resp.raise_for_status()
         
         analysis = resp.json()["choices"][0]["message"]["content"].strip()
-        
-        # حذف کامل هر نوع markdown احتمالی (حتی اگه GPT یادش رفته باشه!)
-        cleanup_map = str.maketrans({
-            '*': '', '**': '', '_': '', '#': '', '`': '', '[': '', ']': '', '(': '', ')': '',
-            '<': '', '>': '', '~': ''
-        })
-        analysis = analysis.translate(cleanup_map)
-        
-        # حذف خطوط خالی اضافی
-        lines = [line.rstrip() for line in analysis.split('\n') if line.strip()]
-        analysis = '\n'.join(lines)
-        
+
+        # حذف همه علائم markdown با replace زنجیره‌ای
+        analysis = analysis.replace('**', '').replace('*', '').replace('__', '').replace('_', '')
+        analysis = analysis.replace('#', '').replace('`', '').replace('~', '').replace('[', '')
+        analysis = analysis.replace(']', '').replace('(', '').replace(')', '').replace('<', '').replace('>', '')
+
+        # حذف خطوط خالی و فاصله‌های اضافی
+        lines = [line.strip() for line in analysis.split('\n') if line.strip()]
+        analysis = '\n\n'.join(lines)  # دو خط فاصله برای خوانایی بهتر
+
         return analysis
+        
     except Exception as e:
         return f"خطا در تولید تحلیل تکنیکال: {str(e)}"
 
