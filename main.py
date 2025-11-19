@@ -783,12 +783,12 @@ async def handle_tech_callback(update: Update, context: ContextTypes.DEFAULT_TYP
 
     levels_text = "\n".join([f"   • {lvl}" for lvl in result["key_levels"]]) if result["key_levels"] else "   • مشخص نیست"
 
-    text = f"""
+        text = f"""
 <b>تحلیل تکنیکال {result["symbol"]}/USDT</b>
 تایم‌فریم: ۴ ساعته
 
 💵 قیمت فعلی: {result["price"]}
-{trend} روند کلی: {result["trend"]}
+🔥 روند کلی: {result["trend"]}
 🤖 پیشنهاد: {result["suggestion"]}
 
 📊 {result["rsi"]}
