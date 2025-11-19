@@ -782,23 +782,24 @@ async def handle_tech_callback(update: Update, context: ContextTypes.DEFAULT_TYP
         return
 
     levels_text = "\n".join([f"   • {lvl}" for lvl in result["key_levels"]]) if result["key_levels"] else "   • مشخص نیست"
+    text = f"""
+    <b>تحلیل تکنیکال {result["symbol"]}/USDT</b>
+    تایم‌فریم: ۴ ساعته
 
-        text = f"""
-<b>تحلیل تکنیکال {result["symbol"]}/USDT</b>
-تایم‌فریم: ۴ ساعته
+    💵 قیمت فعلی: {result["price"]}
+    🔥 روند کلی: {result["trend"]}
+    🤖 پیشنهاد: {result["suggestion"]}
 
-💵 قیمت فعلی: {result["price"]}
-🔥 روند کلی: {result["trend"]}
-🤖 پیشنهاد: {result["suggestion"]}
+    📊 {result["rsi"]}
+    📈 وضعیت MACD: {result["macd"]}
 
-📊 {result["rsi"]}
-📈 وضعیت MACD: {result["macd"]}
+    🔑 سطوح کلیدی (فلت Span B):
+    {levels_text}
 
-🔑 سطوح کلیدی (فلت Span B):
-{levels_text}
+    🕐 {result["time"]}
+     """.strip()
 
-🕐 {result["time"]}
-    """.strip()
+        
 
     keyboard = [[InlineKeyboardButton("بستن", callback_data="close_tech")]]
     await loading_msg.delete()
