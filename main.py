@@ -845,8 +845,8 @@ async def main():
         app.add_handler(CallbackQueryHandler(admin_payment_callback, pattern=r"^(pay_ok|pay_no):"))
         app.add_handler(CallbackQueryHandler(handle_details_callback, pattern=r"^details_"))
         app.add_handler(CallbackQueryHandler(handle_close_details, pattern=r"^close_details_"))
-        app.add_handler(CallbackQueryHandler(handle_tech_analysis, pattern=r"^tech_"))
-        app.add_handler(CallbackQueryHandler(handle_close_tech, pattern=r"^close_tech_"))
+        app.add_handler(CallbackQueryHandler(handle_tech_callback, pattern=r"^tech_"))
+        app.add_handler(CallbackQueryHandler(close_tech_callback, pattern=r"^close_tech$"))
         
 
         await set_bot_commands(app.bot)
