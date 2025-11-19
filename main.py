@@ -831,7 +831,7 @@ async def main():
         print("راه‌اندازی ربات...")
         init_db()
         init_cache_table()
-        init_tech_cache_table()
+        #init_tech_cache_table()
         app = ApplicationBuilder().token(BOT_TOKEN).build()
 
         # هندلرها — همه با ۸ اسپیس
