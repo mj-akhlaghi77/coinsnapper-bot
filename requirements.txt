@@ -8,5 +8,5 @@ apscheduler
 jdatetime
 python-dotenv==1.0.1
 pandas
-pandas-ta
 python-binance
+numpy
