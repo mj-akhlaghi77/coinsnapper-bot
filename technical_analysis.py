@@ -1,258 +1,129 @@
 # technical_analysis.py
-import os
-import requests
-import psycopg2
-from psycopg2.extras import DictCursor
-from datetime import datetime, timedelta
+import time
+import pandas as pd
+import pandas_ta as ta
+from binance.client import Client
+from datetime import datetime
+import jdatetime
 
-# تنظیمات
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-TAAPI_SECRET = os.getenv("TAAPI_SECRET")  # کلید Runflare
-DATABASE_URL = os.getenv("DATABASE_URL")
-MODEL = "gpt-4o-mini"  # ارزون‌تر و سریع‌تر برای تحلیل تکنیکال
-CACHE_MINUTES_TECH = 15  # کش ۱۵ دقیقه‌ای برای تحلیل تکنیکال
+# کش در مموری (۵ دقیقه)
+CACHE = {}
+CACHE_TTL = 300  # ثانیه
 
-def get_db_connection():
-    return psycopg2.connect(DATABASE_URL, cursor_factory=DictCursor)
+client = Client()  # عمومی، نیازی به کلید نیست
 
-def init_tech_cache_table():
-    conn = get_db_connection()
-    cur = conn.cursor()
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS technical_analysis_cache (
-            id SERIAL PRIMARY KEY,
-            symbol TEXT UNIQUE NOT NULL,
-            analysis_text TEXT NOT NULL,
-            created_at TIMESTAMP DEFAULT NOW(),
-            expires_at TIMESTAMP NOT NULL
-        );
-    """)
-    conn.commit()
-    cur.close()
-    conn.close()
-
-def get_cached_tech_analysis(symbol: str) -> str | None:
+def to_shamsi(dt):
     try:
-        conn = get_db_connection()
-        cur = conn.cursor()
-        cur.execute("""
-            SELECT analysis_text FROM technical_analysis_cache 
-            WHERE symbol = %s AND expires_at > NOW()
-        """, (symbol.upper(),))
-        rec = cur.fetchone()
-        cur.close()
-        conn.close()
-        return rec["analysis_text"] if rec else None
+        return jdatetime.datetime.fromgregorian(datetime=dt).strftime("%Y/%m/%d - %H:%M")
+    except:
+        return dt.strftime("%Y-%m-%d %H:%M")
+
+def get_klines(symbol: str, interval: str = "4h", limit: int = 1000):
+    try:
+        klines = client.get_klines(symbol=symbol + "USDT", interval=interval, limit=limit)
+        df = pd.DataFrame(klines, columns=[
+            'timestamp', 'open', 'high', 'low', 'close', 'volume',
+            'close_time', 'quote_volume', 'trades', 'tb_base', 'tb_quote', 'ignore'
+        ])
+        for col in ['open', 'high', 'low', 'close', 'volume']:
+            df[col] = pd.to_numeric(df[col])
+        df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
+        return df
     except Exception as e:
-        print(f"خطا در خواندن کش تکنیکال: {e}")
+        print(f"Binance error: {e}")
         return None
 
-def save_tech_analysis_to_cache(symbol: str, analysis: str):
-    try:
-        conn = get_db_connection()
-        cur = conn.cursor()
-        expires_at = datetime.now() + timedelta(minutes=CACHE_MINUTES_TECH)
-        cur.execute("""
-            INSERT INTO technical_analysis_cache (symbol, analysis_text, expires_at)
-            VALUES (%s, %s, %s)
-            ON CONFLICT (symbol) DO UPDATE SET
-                analysis_text = EXCLUDED.analysis_text,
-                expires_at = EXCLUDED.expires_at,
-                created_at = NOW()
-        """, (symbol.upper(), analysis, expires_at))
-        conn.commit()
-        cur.close()
-        conn.close()
-    except Exception as e:
-        print(f"خطا در ذخیره کش تکنیکال: {e}")
+def detect_flat_span_b(df: pd.DataFrame):
+    ichi = df.ta.ichimoku()
+    if ichi is None or len(ichi) < 2:
+        return []
+    span_b = ichi[1]['ISS_26'].dropna()
+    levels = []
+    i = len(span_b) - 300 if len(span_b) > 300 else 0
+    while i < len(span_b) - 10:
+        window = span_b.iloc[i:i+15]
+        if (window.max() - window.min()) / window.min() < 0.003:  # کمتر از 0.3%
+            levels.append(round(window.mean(), 6))
+            i += 12
+        else:
+            i += 1
+    return list(set(levels))[:3]  # سطوح منحصر به فرد
 
-def get_taapi_data(symbol: str):
-    if not TAAPI_SECRET:
-        return None, "کلید TAAPI.IO تنظیم نشده است."
+def analyze(symbol: str, interval: str = "4h") -> dict:
+    cache_key = f"{symbol.upper()}_{interval}"
+    now = time.time()
 
-    symbol = symbol.upper()
+    # کش
+    if cache_key in CACHE and now - CACHE[cache_key][2] < CACHE_TTL:
+        return CACHE[cache_key][1]
 
-    # فقط کوین‌های رایگان
-    if symbol not in ["BTC", "ETH", "XRP", "LTC", "XMR"]:
-        return None, f"در پلن رایگان فقط BTC، ETH، XRP، LTC و XMR پشتیبانی می‌شن.\n{symbol} فعلاً در دسترس نیست."
+    df = get_klines(symbol.upper(), interval)
+    if df is None or len(df) < 200:
+        return {"error": "دیتا از بایننس دریافت نشد"}
 
-    construct = {
-        "exchange": "binance",
-        "symbol": f"{symbol}/USDT",
-        "interval": "1h",
-        "indicators": [
-            {"id": "rsi", "indicator": "rsi", "period": 14},
-            {"id": "macd", "indicator": "macd"},
-            {"id": "ema50", "indicator": "ema", "period": 50},
-            {"id": "ema200", "indicator": "ema", "period": 200},
-            {"id": "bbands", "indicator": "bbands2", "period": 20},
-            {"id": "stoch", "indicator": "stoch"},
-            {"id": "adx", "indicator": "adx"},
-            {"id": "atr", "indicator": "atr"},
-            {"id": "volume", "indicator": "volume"}
-        ]
+    # اندیکاتورها
+    df['EMA26'] = ta.ema(df['close'], 26)
+    df['EMA50'] = ta.ema(df['close'], 50)
+    df['EMA100'] = ta.ema(df['close'], 100)
+    
+    macd = df.ta.macd(fast=48, slow=104, signal=36)
+    df['MACD'] = macd['MACD_48_104_36']
+    df['MACD_sig'] = macd['MACDs_48_104_36']
+    
+    df['RSI'] = ta.rsi(df['close'], length=14)
+
+    c = df.iloc[-1]   # کندل آخر
+    p = df.iloc[-2]   # کندل قبلی
+
+    # کراس‌های صعودی
+    cross_up_26_50 = c.EMA26 > c.EMA50 and p.EMA26 <= p.EMA50
+    cross_up_50_100 = c.EMA50 > c.EMA100 and p.EMA50 <= p.EMA100
+    cross_up_26_100 = c.EMA26 > c.EMA100 and p.EMA26 <= p.EMA100
+
+    # همه بالای EMA100؟
+    all_above_100 = (c.EMA26 > c.EMA100 and c.EMA50 > c.EMA100 and c.close > c.EMA100)
+    all_below_100 = (c.EMA26 < c.EMA100 and c.EMA50 < c.EMA100 and c.close < c.EMA100)
+
+    # تأیید MACD
+    macd_bull = c.MACD > c.MACD_sig and c.MACD > 0
+    macd_bear = c.MACD < c.MACD_sig and c.MACD < 0
+
+    levels = detect_flat_span_b(df)
+
+    # تصمیم نهایی روند
+    if all_above_100 and macd_bull and (cross_up_26_50 or cross_up_50_100 or cross_up_26_100):
+        trend = "قوی صعودی 🔥🔥"
+        suggestion = "لانگ قوی"
+    elif all_above_100 and macd_bull:
+        trend = "صعودی 🟢"
+        suggestion = "لانگ یا هولد"
+    elif all_below_100 and macd_bear:
+        trend = "نزولی 🔴"
+        suggestion = "شورت یا احتیاط"
+    elif all_below_100 and macd_bear:
+        trend = "قوی نزولی 🛑"
+        suggestion = "شورت قوی"
+    else:
+        trend = "خنثی / رنج ⚪"
+        suggestion = "صبر کن - رنج"
+
+    # هشدار RSI
+    rsi_text = f"RSI: {c.RSI:.1f}"
+    if c.RSI > 70:
+        rsi_text += " ➜ اشباع خرید ⚠️"
+    elif c.RSI < 30:
+        rsi_text += " ➜ اشباع فروش ⚠️"
+
+    result = {
+        "symbol": symbol.upper(),
+        "price": f"${c.close:,.2f}",
+        "trend": trend,
+        "suggestion": suggestion,
+        "rsi": rsi_text,
+        "macd": "صعودی 🟢" if macd_bull else "نزولی 🔴" if macd_bear else "خنثی ⚪",
+        "key_levels": levels,
+        "time": to_shamsi(datetime.now())
     }
 
-    url = "https://api.taapi.io/bulk"
-    payload = {
-        "secret": TAAPI_SECRET,
-        "construct": construct
-    }
-
-    try:
-        resp = requests.post(url, json=payload, timeout=20)
-        resp.raise_for_status()
-        raw = resp.json()
-
-        # بررسی خطا
-        if "error" in raw:
-            return None, f"خطا در TAAPI: {raw['error']}"
-
-        data = raw.get("data", [])
-
-        # حالا فقط و فقط حالت لیست (رفتار جدید TAAPI از ۲۰۲۵ به بعد)
-        if not isinstance(data, list):
-            return None, "خروجی TAAPI نامعتبر بود (باید لیست باشه!)."
-
-        results = {}
-
-        for item in data:
-            key_id = item.get("id")
-            result = item.get("result")
-
-            if key_id is None or result is None:
-                continue
-
-            if isinstance(result, dict):
-                if "value" in result:  # RSI, EMA, ADX و ...
-                    results[key_id] = result["value"]
-                else:
-                    # MACD, BBands, Stoch و ...
-                    for subkey, subval in result.items():
-                        results[f"{key_id}_{subkey}".lower()] = subval
-            else:
-                results[key_id] = result
-
-        # مقداردهی پیش‌فرض برای پرامپت (کلیدها رو دقیقاً مثل پرامپت تنظیم کردیم)
-        results.setdefault("rsi", None)
-        results.setdefault("macd_macd", None)
-        results.setdefault("macd_signal", None)
-        results.setdefault("ema50", None)
-        results.setdefault("ema200", None)
-        results.setdefault("bbands_middle", None)
-        results.setdefault("bbands_upper", None)
-        results.setdefault("bbands_lower", None)
-        results.setdefault("stoch_k", None)
-        results.setdefault("adx", None)
-        results.setdefault("atr", None)
-        results.setdefault("volume", None)
-
-        return results, None
-
-    except requests.exceptions.HTTPError as e:
-        try:
-            err = e.response.json()
-            msg = err.get("error") or str(err)
-        except:
-            msg = e.response.text
-        return None, f"خطا در TAAPI: {e.response.status_code} - {msg}"
-    except Exception as e:
-        return None, f"خطا در ارتباط با TAAPI: {str(e)}"
-        
-def generate_technical_analysis(symbol: str, ta_data: dict) -> str:
-    if not OPENAI_API_KEY:
-        return "کلید ChatGPT تنظیم نشده است."
-
-    prompt = f"""
-    تو یک تحلیلگر تکنیکال حرفه‌ای هستی. فقط و فقط تحلیل تکنیکال بده.
-    با زبان فارسی، روان، ساده و جذاب برای عموم مردم.
-    از داده‌های زیر یک تحلیل کامل تکنیکال بده (تایم‌فریم ۱ ساعته):
-
-    نماد: {symbol}/USDT
-    RSI(14): {ta_data.get('rsi', 'نامشخص')}
-    MACD: {ta_data.get('macd_macd', 'نامشخص')} (سیگنال: {ta_data.get('macd_signal', 'نامشخص')})
-    EMA50: {ta_data.get('ema50', 'نامشخص')}
-    EMA200: {ta_data.get('ema200', 'نامشخص')}
-    باند بولینگر (میانی): {ta_data.get('bbands_middle', 'نامشخص')}
-    باند بولینگر (بالا): {ta_data.get('bbands_upper', 'نامشخص')}
-    باند بولینگر (پایین): {ta_data.get('bbands_lower', 'نامشخص')}
-    Stochastic %K: {ta_data.get('stoch_k', 'نامشخص')}
-    ADX: {ta_data.get('adx', 'نامشخص')}
-    ATR: {ta_data.get('atr', 'نامشخص')}
-    حجم ۲۴ ساعته: {ta_data.get('volume', 'نامشخص')}
-
-    تحلیل رو اینطوری بساز:
-    **تحلیل تکنیکال {symbol}/USDT (تایم‌فریم ۱ ساعته)**
-
-    **وضعیت فعلی قیمت**
-    - توضیح بده قیمت کجاست نسبت به EMA50 و EMA200 (بالا/پایین/تلاقی)
-
-    **سیگنال‌های مهم**
-    - RSI: اشباع خرید/فروش؟ روند خنثی؟
-    - MACD: تقاطع صعودی/نزولی؟ هیستوگرام مثبت/منفی؟
-    - بولینگر: فشردگی؟ خروج از باند؟
-
-    **قدرت روند و نوسان**
-    - ADX: روند قوی داره یا ضعیف؟
-    - ATR: نوسان چقدره؟
-
-    **جمع‌بندی تکنیکال**
-    - روند کوتاه‌مدت: صعودی / نزولی / رنج
-    - سطوح مهم: مقاومت/حمایت (از بولینگر یا EMAها حدس بزن)
-    - نکته مهم برای تریدرها
-
-    فقط تحلیل بده. هیچ پیشنهاد خرید/فروش نکن.
-    از ایموجی استفاده کن تا جذاب بشه: 🚀📉🔥🧊 و ...
-    """
-
-    try:
-        headers = {"Authorization": f"Bearer {OPENAI_API_KEY}", "Content-Type": "application/json"}
-        payload = {
-            "model": MODEL,
-            "messages": [{"role": "user", "content": prompt}],
-            "temperature": 0.6,
-            "max_tokens": 900
-        }
-        resp = requests.post("https://api.openai.com/v1/chat/completions", json=payload, headers=headers, timeout=40)
-        resp.raise_for_status()
-        
-        analysis = resp.json()["choices"][0]["message"]["content"].strip()
-
-        # حذف همه علائم markdown با replace زنجیره‌ای
-        analysis = analysis.replace('**', '').replace('*', '').replace('__', '').replace('_', '')
-        analysis = analysis.replace('#', '').replace('`', '').replace('~', '').replace('[', '')
-        analysis = analysis.replace(']', '').replace('(', '').replace(')', '').replace('<', '').replace('>', '')
-
-        # حذف خطوط خالی و فاصله‌های اضافی
-        lines = [line.strip() for line in analysis.split('\n') if line.strip()]
-        analysis = '\n\n'.join(lines)  # دو خط فاصله برای خوانایی بهتر
-
-        return analysis
-        
-    except Exception as e:
-        return f"خطا در تولید تحلیل تکنیکال: {str(e)}"
-
-def get_technical_analysis(symbol: str) -> str:
-    symbol = symbol.upper()
-
-    # اول کش
-    cached = get_cached_tech_analysis(symbol)
-    if cached:
-        return f"تحلیل تکنیکال {symbol}/USDT (از کش - بروز هر ۱۵ دقیقه)\n\n{cached}"
-
-    # اگر کش نبود → داده از TAAPI
-    ta_data, error = get_taapi_data(symbol)
-    if error:
-        return error
-
-    if not ta_data:
-        return "داده تکنیکال دریافت نشد. شاید ارز پشتیبانی نمیشه (فقط BTC, ETH, XRP, LTC, XMR در پلن رایگان)."
-
-    # تولید تحلیل با GPT
-    analysis = generate_technical_analysis(symbol, ta_data)
-
-    # ذخیره در کش
-    if len(analysis) > 100 and "خطا" not in analysis:
-        save_tech_analysis_to_cache(symbol, analysis)
-
-    return f"تحلیل تکنیکال {symbol}/USDT (تازه)\n\n{analysis}"
+    CACHE[cache_key] = (df, result, now)
+    return result
