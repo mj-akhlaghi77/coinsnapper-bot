@@ -10,3 +10,4 @@ python-dotenv==1.0.1
 pandas
 python-binance
 numpy
+ta
