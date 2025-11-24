@@ -91,7 +91,7 @@ def detect_divergence(price_peaks, indicator_peaks, type='regular'):
 # --- تحلیل اصلی ---
 def advanced_technical_analysis(symbol: str) -> str:
     symbol = symbol.upper()
-    df = get_klines(symbol, limit=1000)
+    df = get_klines(symbol, interval="5m", limit=1000)  # ۵ دقیقه
     if df.empty or len(df) < 300:
         return f"داده کافی برای {symbol} وجود ندارد."
 
