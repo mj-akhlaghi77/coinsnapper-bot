@@ -22,7 +22,7 @@ import telegram.error
 import psycopg2
 from psycopg2.extras import DictCursor
 from deep_analysis import get_deep_analysis, init_cache_table
-from technical_analysis import analyze as tech_analyze
+from advanced_technical_analysis import advanced_technical_analysis
 
 # -------------------------
 # تنظیمات محیطی
@@ -836,6 +836,8 @@ async def main():
         #init_tech_cache_table()
         app = ApplicationBuilder().token(BOT_TOKEN).build()
 
+        analysis = advanced_technical_analysis(symbol)
+
         # هندلرها — همه با ۸ اسپیس
         app.add_handler(CommandHandler("start", start))
         app.add_handler(CommandHandler("check", check_subscription))
@@ -849,7 +851,7 @@ async def main():
         app.add_handler(CallbackQueryHandler(handle_close_details, pattern=r"^close_details_"))
         app.add_handler(CallbackQueryHandler(handle_tech_callback, pattern=r"^tech_"))
         app.add_handler(CallbackQueryHandler(close_tech_callback, pattern=r"^close_tech$"))
-        
+      
 
         await set_bot_commands(app.bot)
         await check_and_select_api_key(app.bot)
