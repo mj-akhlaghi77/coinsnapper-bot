@@ -18,7 +18,9 @@ import telegram.error
 import psycopg2
 from psycopg2.extras import DictCursor
 from deep_analysis import get_deep_analysis, init_cache_table
-from technical_analysis import analyze as tech_analyze
+import math
+from technical_analysis import analyze_from_df
+
 
 # -------------------------
 # تنظیمات محیطی
@@ -827,6 +829,78 @@ async def handle_tech_callback(update: Update, context: ContextTypes.DEFAULT_TYP
             await loading_msg.edit_text(f"خطا در پردازش تحلیل: {str(e)}")
         except:
             pass
+
+import requests
+import math
+from technical_analysis import analyze_from_df
+
+# اضافه کن در main.py:
+async def handle_tech_callback(update, context):
+    query = update.callback_query
+    await query.answer()
+    symbol = query.data[len("tech_"):].upper()
+
+    # چک اشتراک
+    user_id = query.from_user.id
+    subscribed, _ = check_subscription_status(user_id)
+    if not subscribed:
+        await query.message.reply_text("برای دیدن تحلیل تکنیکال نیاز به اشتراک داری.")
+        return
+
+    loading = await query.message.reply_text(f"در حال گرفتن کندل‌ها و اجرای زیگ‌زاگ برای {symbol} ...")
+
+    try:
+        # تبدیل به نماد بایننس: اگر کاربر BTC یا ETH داده، معمولا نماد در بایننس مثل BTCUSDT
+        binance_symbol = f"{symbol}USDT"
+
+        url = "https://api.binance.com/api/v3/klines"
+        params = {
+            "symbol": binance_symbol,
+            "interval": "4h",
+            "limit": 300
+        }
+        resp = requests.get(url, params=params, timeout=10)
+        resp.raise_for_status()
+        klines = resp.json()  # هر آیتم: [openTime, open, high, low, close, ...]
+        if not klines:
+            raise Exception("کندل پیدا نشد")
+
+        # ساخت دیتا‌فریم با 300 کندل (صعودی از قدیم به جدید)
+        df = pd.DataFrame(klines, columns=[
+            "open_time","open","high","low","close","volume","close_time",
+            "qav","num_trades","taker_base_vol","taker_quote_vol","ignore"
+        ])
+        df['close'] = df['close'].astype(float)
+        df['open_time'] = pd.to_datetime(df['open_time'], unit='ms')
+        df = df.reset_index(drop=True)
+
+        # نکته‌ی توصیف تو: "کلوز کندل ۳۰۰ ام نقطه شروع رسم زیگزاگ" — ما ۳۰۰ کندل گرفتیم و analyze از تمام این‌ها استفاده می‌کنه
+        result = analyze_from_df(df, depth=12, deviation=5, backstep=3)
+
+        trend = result.get('trend', 'نامشخص')
+        reason = result.get('reason', '')
+        extrema = result.get('extrema', [])
+
+        # پیام خلاصه
+        txt = f"📊 تحلیل تکنیکال (۴ساعته) برای <b>{symbol}</b>:\n\n"
+        txt += f"روند: <b>{trend}</b>\n"
+        if reason:
+            txt += f"علت: {reason}\n"
+        txt += f"\nتعداد اکستریماهای شناسایی‌شده: {len(extrema)}\n"
+        txt += "\n(از آخرین ۳۰۰ کندل بررسی شد)\n"
+
+        # دکمه بستن
+        keyboard = [[InlineKeyboardButton("بستن", callback_data="close_tech")]]
+
+        await loading.delete()
+        await query.message.reply_text(txt, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(keyboard))
+    except Exception as e:
+        print(f"handle_tech_callback error for {symbol}: {e}")
+        try:
+            await loading.delete()
+        except:
+            pass
+        await query.message.reply_text("خطا در دریافت یا تحلیل کندل‌ها. مطمئن شو نماد صحیحه و بایننس اون جفت رو داره.")
 
 
 
