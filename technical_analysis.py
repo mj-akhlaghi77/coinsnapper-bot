@@ -1,4 +1,5 @@
 # technical_analysis.py - نسخه کاملاً سفارشی برای شما
+
 from binance.client import Client
 import pandas as pd
 
