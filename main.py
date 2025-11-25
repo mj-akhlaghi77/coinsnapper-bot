@@ -1,8 +1,5 @@
 # main.py
-# نسخهٔ نهایی: مینیمال، دوستانه، گزارش CMC ساعتی با تاریخ شمسی،
-# دکمهٔ وضعیت کلی بازار فقط برای مشترکین، دکمهٔ اشتراک/بررسی اشتراک،
-# نمایش اطلاعات تکمیلی برای مشترکین و نمایش کانترکت‌ها (درصورت وجود).
-# دکمه‌ها در کیبورد پایین ربات (نه inline) 
+ 
 
 import os
 import requests
@@ -22,7 +19,7 @@ import telegram.error
 import psycopg2
 from psycopg2.extras import DictCursor
 from deep_analysis import get_deep_analysis, init_cache_table
-from advanced_technical_analysis import advanced_technical_analysis
+from technical_analysis import analyze as tech_analyze
 
 # -------------------------
 # تنظیمات محیطی
@@ -760,66 +757,50 @@ async def send_pending_renewal_notifications(bot: Bot):
 
 
 # تابع جدید (تحلیل تکنیکال)
-
-async def handle_tech_analysis(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def handle_tech_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     
     user_id = query.from_user.id
-    subscribed, days_left = check_subscription_status(user_id)
-
+    subscribed, _ = check_subscription_status(user_id)
+    
     if not subscribed:
-        await query.message.reply_text(
-            "تحلیل تکنیکال پیشرفته (زیگزاگ + مکدی ۴ برابر + سنکو اسپن B + دایورجنس)\n"
-            "فقط برای مشترکین فعال است"
-        )
+        await query.edit_message_text("🚫 تحلیل تکنیکال فقط برای مشترکین فعاله!")
         return
 
     symbol = query.data[len("tech_"):].upper()
+    
+    loading_msg = await query.message.reply_text("در حال تحلیل تکنیکال ۴ ساعته... ⏳")
 
-    # پیام لودینگ
-    loading_msg = await query.message.reply_text(
-        f"در حال تحلیل پیشرفته {symbol}/تتر...\n"
-        "زیگزاگ دوگانه، مکدی ۴ برابر، سنکو اسپن B، دایورجنس و هیدن دایورجنس در حال بررسی است..."
-    )
+    result = tech_analyze(symbol)
 
-    try:
-        # دریافت تحلیل از سیستم جدید
-        raw_analysis = advanced_technical_analysis(symbol)
+    if "error" in result:
+        await loading_msg.edit_text("موقتی در دسترس نیست — بعداً امتحان کن")
+        return
 
-        # تمیز کردن نهایی خروجی (حتی اگر چیزی جا مونده باشه)
-        analysis = raw_analysis.replace('**', '').replace('*', '').replace('_', '').replace('#', '').replace('`', '')
-        lines = [line.strip() for line in analysis.split('\n') if line.strip()]
-        final_analysis = '\n'.join(lines)
+    levels_text = "\n".join([f"   • {lvl}" for lvl in result["key_levels"]]) if result["key_levels"] else "   • مشخص نیست"
+    text = f"""
+    <b>تحلیل تکنیکال {result["symbol"]}/USDT</b>
+    تایم‌فریم: ۴ ساعته
 
-        # اضافه کردن هدر زیبا و حرفه‌ای
-        header = f"تحلیل تکنیکال پیشرفته {symbol}/تتر\n"
-        header += "تایم‌فریم: ۱ ساعته | سیستم: زیگزاگ + مکدی ۴ برابر + سنکو اسپن B\n"
-        header += "═" * 40 + "\n\n"
+    💵 قیمت فعلی: {result["price"]}
+    🔥 روند کلی: {result["trend"]}
+    🤖 پیشنهاد: {result["suggestion"]}
 
-        final_text = header + final_analysis
+    📊 {result["rsi"]}
+    📈 وضعیت MACD: {result["macd"]}
 
-    except Exception as e:
-        final_text = f"خطا در تحلیل {symbol}: {str(e)}"
-        print(f"خطا در advanced_technical_analysis برای {symbol}: {e}")
+    🔑 سطوح کلیدی (فلت Span B):
+    {levels_text}
 
-    # حذف لودینگ
-    try:
-        await loading_msg.delete()
-    except:
-        pass
+    🕐 {result["time"]}
+     """.strip()
 
-    # دکمه بستن
-    keyboard = [[InlineKeyboardButton("بستن", callback_data=f"close_tech_{symbol.lower()}")]]
-    reply_markup = InlineKeyboardMarkup(keyboard)
+        
 
-    # ارسال تحلیل نهایی
-    await query.message.reply_text(
-        final_text,
-        parse_mode=None,  # بدون markdown
-        reply_markup=reply_markup,
-        disable_web_page_preview=True
-    )
+    keyboard = [[InlineKeyboardButton("بستن", callback_data="close_tech")]]
+    await loading_msg.delete()
+    await query.message.reply_text(text, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(keyboard))
 
 async def close_tech_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
@@ -852,8 +833,6 @@ async def main():
         #init_tech_cache_table()
         app = ApplicationBuilder().token(BOT_TOKEN).build()
 
-        
-
         # هندلرها — همه با ۸ اسپیس
         app.add_handler(CommandHandler("start", start))
         app.add_handler(CommandHandler("check", check_subscription))
@@ -865,12 +844,9 @@ async def main():
         app.add_handler(CallbackQueryHandler(admin_payment_callback, pattern=r"^(pay_ok|pay_no):"))
         app.add_handler(CallbackQueryHandler(handle_details_callback, pattern=r"^details_"))
         app.add_handler(CallbackQueryHandler(handle_close_details, pattern=r"^close_details_"))
-        # هندلر تحلیل تکنیکال پیشرفته
-        app.add_handler(CallbackQueryHandler(handle_tech_analysis, pattern=r"^tech_"))
-
-         # هندلر بستن تحلیل
-        app.add_handler(CallbackQueryHandler(handle_close_tech, pattern=r"^close_tech_"))
-      
+        app.add_handler(CallbackQueryHandler(handle_tech_callback, pattern=r"^tech_"))
+        app.add_handler(CallbackQueryHandler(close_tech_callback, pattern=r"^close_tech$"))
+        
 
         await set_bot_commands(app.bot)
         await check_and_select_api_key(app.bot)
