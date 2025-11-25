@@ -1,177 +1,107 @@
-# technical_analysis.py
-import time
-import pandas as pd
-import numpy as np
+# technical_analysis.py - نسخه کاملاً سفارشی برای شما
 from binance.client import Client
-from datetime import datetime
-import jdatetime
+import pandas as pd
 
-# تنظیمات ZigZag
-ZIGZAG_DEPTH = 12
-ZIGZAG_DEVIATION = 5  # درصد
-ZIGZAG_BACKSTEP = 3
+client = Client()
 
-client = Client()  # نیازی به کلید نیست برای داده‌های عمومی
+def analyze(symbol: str):
+    symbol = symbol.upper() + "USDT"
 
-def to_shamsi(dt):
     try:
-        return jdatetime.datetime.fromgregorian(datetime=dt).strftime("%Y/%m/%d - %H:%M")
-    except:
-        return dt.strftime("%Y-%m-%d %H:%M")
+        klines = client.get_klines(symbol=symbol, interval="4h", limit=1000)
+        if len(klines) < 500:
+            return {"error": "داده کافی نیست"}
 
-def fetch_klines(symbol: str, interval: str = "4h", limit: int = 1000):
-    """دریافت ۱۰۰۰ کندل ۴ ساعته از بایننس"""
-    try:
-        klines = client.get_klines(
-            symbol=symbol + "USDT",
-            interval=interval,
-            limit=limit
-        )
-        df = pd.DataFrame(klines, columns=[
+        # فقط ۵۰۰ کندل آخر
+        df = pd.DataFrame(klines[-500:], columns=[
             'timestamp', 'open', 'high', 'low', 'close', 'volume',
-            'close_time', 'quote_asset_volume', 'number_of_trades',
-            'taker_buy_base', 'taker_buy_quote', 'ignore'
+            'close_time', 'qav', 'trades', 'tbb', 'tbq', 'ignore'
         ])
         df['close'] = pd.to_numeric(df['close'])
         df['high'] = pd.to_numeric(df['high'])
         df['low'] = pd.to_numeric(df['low'])
-        df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
-        return df[['timestamp', 'open', 'high', 'low', 'close']].tail(500).reset_index(drop=True)
-    except Exception as e:
-        print(f"خطا در دریافت داده بایننس: {e}")
-        return None
 
-def zigzag(df: pd.DataFrame):
-    """الگوریتم ZigZag با تنظیمات مشخص"""
-    high_points = []
-    low_points = []
-    last_pivot = None
-    direction = 0  # 1 = بالا، -1 = پایین، 0 = شروع
+        # نقطه مرجع: کلوز کندل شماره ۳۰۰ از آخر (یعنی ایندکس ۲۰۰ در دیتافریم ۵۰۰ تایی)
+        reference_price = df['close'].iloc[200]  # کندل ۳۰۰ام از آخر
 
-    deviation = ZIGZAG_DEVIATION / 100
+        # تنظیمات ZigZag
+        depth = 12
+        deviation = 0.05  # 5%
+        backstep = 3
 
-    for i in range(ZIGZAG_DEPTH, len(df) - ZIGZAG_DEPTH):
-        high = df['high'].iloc[i]
-        low = df['low'].iloc[i]
-        close = df['close'].iloc[i]
-        time = df['timestamp'].iloc[i]
+        pivots = []
+        last_pivot_price = None
+        last_pivot_type = None
 
-        # بررسی High جدید
-        is_high = all(high >= df['high'].iloc[i - ZIGZAG_DEPTH:i + ZIGZAG_DEPTH + 1])
-        # بررسی Low جدید
-        is_low = all(low <= df['low'].iloc[i - ZIGZAG_DEPTH:i + ZIGZAG_DEPTH + 1])
+        for i in range(depth, len(df) - depth):
+            high = df['high'].iloc[i]
+            low = df['low'].iloc[i]
+            close = df['close'].iloc[i]
 
-        if is_high or is_low:
-            if last_pivot is None:
-                # اولین پیوت
-                if is_high:
-                    high_points.append((time, close, i))
-                    last_pivot = ("high", high, close, i)
-                    direction = -1
-                elif is_low:
-                    low_points.append((time, close, i))
-                    last_pivot = ("low", low, close, i)
-                    direction = 1
+            is_high = high == df['high'].iloc[i-depth:i+depth+1].max()
+            is_low = low == df['low'].iloc[i-depth:i+depth+1].min()
+
+            if not (is_high or is_low):
                 continue
 
-            last_type, last_price, last_close, last_idx = last_pivot
+            if last_pivot_price is None:
+                # اولین پیوت بعد از کندل ۳۰۰
+                pivots.append(close)
+                last_pivot_price = close
+                last_pivot_type = "high" if is_high else "low"
+                continue
 
-            # محاسبه تغییر درصد از آخرین پیوت
-            change = (close - last_close) / last_close if last_close > 0 else 0
+            change = (close - last_pivot_price) / last_pivot_price
 
-            # اگر جهت مخالف و تغییر کافی داشت
-            if (direction == 1 and is_low and change <= -deviation) or \
-               (direction == -1 and is_high and change >= deviation):
+            if (last_pivot_type == "high" and is_low and change <= -deviation) or \
+               (last_pivot_type == "low" and is_high and change >= deviation):
 
-                # بررسی Backstep
-                skip = False
-                if len(high_points) > 0 and last_type == "high":
-                    for t, c, idx in reversed(high_points[-ZIGZAG_BACKSTEP:]):
-                        if idx > last_idx and c > close:
-                            skip = True
-                            break
-                elif len(low_points) > 0 and last_type == "low":
-                    for t, c, idx in reversed(low_points[-ZIGZAG_BACKSTEP:]):
-                        if idx > last_idx and c < close:
-                            skip = True
-                            break
+                # Backstep چک
+                valid = True
+                recent_same = [p for p in pivots[-backstep:] if 
+                              (last_pivot_type == "high" and p > close) or 
+                              (last_pivot_type == "low" and p < close)]
+                if recent_same:
+                    valid = False
 
-                if not skip:
-                    if is_high:
-                        high_points.append((time, close, i))
-                        last_pivot = ("high", high, close, i)
-                        direction = -1
-                    else:
-                        low_points.append((time, close, i))
-                        last_pivot = ("low", low, close, i)
-                        direction = 1
+                if valid:
+                    pivots.append(close)
+                    last_pivot_price = close
+                    last_pivot_type = "high" if is_high else "low"
 
-    # ترکیب نقاط
-    points = []
-    for t, c, i in high_points:
-        points.append({"time": t, "price": c, "type": "high", "index": i})
-    for t, c, i in low_points:
-        points.append({"time": t, "price": c, "type": "low", "index": i})
+        if len(pivots) < 2:
+            return {"error": "اکستریم کافی تشکیل نشده"}
 
-    points.sort(key=lambda x: x["index"])
-    return points
+        # تعیین روند بر اساس اولین اکستریم نسبت به کندل ۳۰۰
+        first_extreme = pivots[0]
 
-def analyze(symbol: str):
-    """تابع اصلی تحلیل تکنیکال - فراخوانی شده از main.py"""
-    symbol = symbol.upper()
+        if first_extreme > reference_price:
+            # روند صعودی → فقط Higher High ها
+            filtered = []
+            current_hh = reference_price
+            for price in pivots:
+                if price > current_hh:
+                    filtered.append(price)
+                    current_hh = price
+        else:
+            # روند نزولی → فقط Lower Low ها
+            filtered = []
+            current_ll = reference_price
+            for price in pivots:
+                if price < current_ll:
+                    filtered.append(price)
+                    current_ll = price
 
-    # دریافت قیمت فعلی
-    try:
-        ticker = client.get_symbol_ticker(symbol=symbol + "USDT")
-        current_price = float(ticker["price"])
-    except:
-        current_price = 0.0
+        if not filtered:
+            return {"error": "روند مشخصی تشکیل نشده"}
 
-    df = fetch_klines(symbol)
-    if df is None or len(df) < 100:
-        return {"error": "داده کافی دریافت نشد"}
+        # خروجی نهایی: فقط قیمت‌ها، هر خط یکی
+        key_levels = [f"{price:,.8f}".rstrip('0').rstrip('.') for price in filtered]
 
-    points = zigzag(df)
+        return {
+            "symbol": symbol.replace("USDT", ""),
+            "key_levels": key_levels  # فقط لیست قیمت‌ها
+        }
 
-    if len(points) < 2:
-        key_levels = ["تحلیل ZigZag: نقاط کافی شناسایی نشد."]
-    else:
-        # آخرین High و Low
-        last_high = None
-        last_low = None
-        for p in reversed(points):
-            if p["type"] == "high" and last_high is None:
-                last_high = p
-            elif p["type"] == "low" and last_low is None:
-                last_low = p
-            if last_high and last_low:
-                break
-
-        key_levels = []
-        for i, p in enumerate(points):
-            emoji = "High" if p["type"] == "high" else "Low"
-            label = "آخرین High" if p is last_high else "آخرین Low" if p is last_low else f"اکستریم {i+1}"
-            key_levels.append(f"{emoji} {label}: <b>{p['price']:,.8f}</b> در {to_shamsi(p['time'])}")
-
-        # شروع از کندل ۵۰۰ام (اولین نقطه ممکن)
-        start_price = df.iloc[0]['close']
-        trend = "صعودی" if points and points[-1]["type"] == "high" else "نزولی" if points else "نامشخص"
-        if len(points) >= 2:
-            if points[-2]["type"] == "low" and points[-1]["type"] == "high":
-                trend = "صعودی (Higher High)"
-            elif points[-2]["type"] == "high" and points[-1]["type"] == "low":
-                trend = "نزولی (Lower Low)"
-
-        suggestion = "در حال تشکیل موج جدید" if len(points) < 3 else "منتظر شکست سطوح کلیدی باش"
-
-    return {
-        "symbol": symbol,
-        "price": f"${current_price:,.8f}" if current_price else "نامشخص",
-        "trend": trend,
-        "suggestion": suggestion,
-        "rsi": "در دسترس نیست (در نسخه بعدی)",
-        "macd": "در دسترس نیست (در نسخه بعدی)",
-        "key_levels": key_levels,
-        "time": to_shamsی(datetime.now()),
-        "points_count": len(points)
-    }
+    except Exception as e:
+        return {"error": f"خطا: {str(e)}"}
