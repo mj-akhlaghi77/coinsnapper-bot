@@ -1,4 +1,4 @@
-# technical_analysis.py - نسخه سازگار با Runflare / Python 3.11
+# technical_analysis.py
 import time
 import pandas as pd
 import numpy as np
@@ -6,10 +6,12 @@ from binance.client import Client
 from datetime import datetime
 import jdatetime
 
-CACHE = {}
-CACHE_TTL = 300
+# تنظیمات ZigZag
+ZIGZAG_DEPTH = 12
+ZIGZAG_DEVIATION = 5  # درصد
+ZIGZAG_BACKSTEP = 3
 
-client = Client()
+client = Client()  # نیازی به کلید نیست برای داده‌های عمومی
 
 def to_shamsi(dt):
     try:
@@ -17,123 +19,159 @@ def to_shamsi(dt):
     except:
         return dt.strftime("%Y-%m-%d %H:%M")
 
-def ema(series, period):
-    return series.ewm(span=period, adjust=False).mean()
-
-def macd_custom(close, fast=48, slow=104, signal=36):
-    ema_fast = ema(close, fast)
-    ema_slow = ema(close, slow)
-    macd_line = ema_fast - ema_slow
-    signal_line = ema(macd_line, signal)
-    histogram = macd_line - signal_line
-    return macd_line, signal_line, histogram
-
-def rsi(close, period=14):
-    delta = close.diff()
-    gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
-    loss = (-delta.where(delta < 0, 0)).rolling(window=period).mean()
-    rs = gain / loss
-    return 100 - (100 / (1 + rs))
-
-def ichimoku_span_b(high, low):
-    # ساده‌سازی شده Span B (26 دوره قبل)
-    period52_high = high.rolling(52).max()
-    period52_low = low.rolling(52).min()
-    return (period52_high + period52_low) / 2
-
-def get_klines(symbol: str, interval: str = "4h", limit: int = 1000):
+def fetch_klines(symbol: str, interval: str = "4h", limit: int = 1000):
+    """دریافت ۱۰۰۰ کندل ۴ ساعته از بایننس"""
     try:
-        klines = client.get_klines(symbol=symbol + "USDT", interval=interval, limit=limit)
-        df = pd.DataFrame(klines[:], columns=[
+        klines = client.get_klines(
+            symbol=symbol + "USDT",
+            interval=interval,
+            limit=limit
+        )
+        df = pd.DataFrame(klines, columns=[
             'timestamp', 'open', 'high', 'low', 'close', 'volume',
-            'close_time', 'quote_volume', 'trades', 'tb_base', 'tb_quote', 'ignore'
+            'close_time', 'quote_asset_volume', 'number_of_trades',
+            'taker_buy_base', 'taker_buy_quote', 'ignore'
         ])
-        for col in ['open', 'high', 'low', 'close', 'volume']:
-            df[col] = pd.to_numeric(df[col])
-        return df
+        df['close'] = pd.to_numeric(df['close'])
+        df['high'] = pd.to_numeric(df['high'])
+        df['low'] = pd.to_numeric(df['low'])
+        df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
+        return df[['timestamp', 'open', 'high', 'low', 'close']].tail(500).reset_index(drop=True)
     except Exception as e:
-        print(f"Binance error: {e}")
+        print(f"خطا در دریافت داده بایننس: {e}")
         return None
 
-def detect_flat_span_b(df):
-    span_b = ichimoku_span_b(df['high'], df['low'])
-    recent = span_b.dropna().iloc[-300:]
-    levels = []
-    i = 0
-    while i < len(recent) - 15:
-        window = recent.iloc[i:i+15]
-        if (window.max() - window.min()) / window.min() < 0.003:  # < 0.3%
-            levels.append(round(window.mean(), 6))
-            i += 12
-        else:
-            i += 1
-    return list(set(levels))[:3]
+def zigzag(df: pd.DataFrame):
+    """الگوریتم ZigZag با تنظیمات مشخص"""
+    high_points = []
+    low_points = []
+    last_pivot = None
+    direction = 0  # 1 = بالا، -1 = پایین، 0 = شروع
 
-def analyze(symbol: str, interval: str = "4h") -> dict:
-    cache_key = f"{symbol.upper()}_{interval}"
-    now = time.time()
+    deviation = ZIGZAG_DEVIATION / 100
 
-    if cache_key in CACHE and now - CACHE[cache_key][2] < CACHE_TTL:
-        return CACHE[cache_key][1]
+    for i in range(ZIGZAG_DEPTH, len(df) - ZIGZAG_DEPTH):
+        high = df['high'].iloc[i]
+        low = df['low'].iloc[i]
+        close = df['close'].iloc[i]
+        time = df['timestamp'].iloc[i]
 
-    df = get_klines(symbol.upper(), interval)
-    if df is None or len(df) < 200:
-        return {"error": "دیتا دریافت نشد"}
+        # بررسی High جدید
+        is_high = all(high >= df['high'].iloc[i - ZIGZAG_DEPTH:i + ZIGZAG_DEPTH + 1])
+        # بررسی Low جدید
+        is_low = all(low <= df['low'].iloc[i - ZIGZAG_DEPTH:i + ZIGZAG_DEPTH + 1])
 
-    close = df['close']
-    df['EMA26'] = ema(close, 26)
-    df['EMA50'] = ema(close, 50)
-    df['EMA100'] = ema(close, 100)
-    
-    macd_line, signal_line, _ = macd_custom(close)
-    df['MACD'] = macd_line
-    df['MACD_sig'] = signal_line
-    
-    df['RSI'] = rsi(close)
+        if is_high or is_low:
+            if last_pivot is None:
+                # اولین پیوت
+                if is_high:
+                    high_points.append((time, close, i))
+                    last_pivot = ("high", high, close, i)
+                    direction = -1
+                elif is_low:
+                    low_points.append((time, close, i))
+                    last_pivot = ("low", low, close, i)
+                    direction = 1
+                continue
 
-    c = df.iloc[-1]
-    p = df.iloc[-2]
+            last_type, last_price, last_close, last_idx = last_pivot
 
-    all_above_100 = (c.EMA26 > c.EMA100 and c.EMA50 > c.EMA100 and c.close > c.EMA100)
-    all_below_100 = (c.EMA26 < c.EMA100 and c.EMA50 < c.EMA100 and c.close < c.EMA100)
+            # محاسبه تغییر درصد از آخرین پیوت
+            change = (close - last_close) / last_close if last_close > 0 else 0
 
-    cross_up = (c.EMA26 > c.EMA50 > c.EMA100 and p.EMA26 <= p.EMA50) or (c.EMA50 > c.EMA100 and p.EMA50 <= p.EMA100)
+            # اگر جهت مخالف و تغییر کافی داشت
+            if (direction == 1 and is_low and change <= -deviation) or \
+               (direction == -1 and is_high and change >= deviation):
 
-    macd_bull = c.MACD > c.MACD_sig and c.MACD > 0
-    macd_bear = c.MACD < c.MACD_sig and c.MACD < 0
+                # بررسی Backstep
+                skip = False
+                if len(high_points) > 0 and last_type == "high":
+                    for t, c, idx in reversed(high_points[-ZIGZAG_BACKSTEP:]):
+                        if idx > last_idx and c > close:
+                            skip = True
+                            break
+                elif len(low_points) > 0 and last_type == "low":
+                    for t, c, idx in reversed(low_points[-ZIGZAG_BACKSTEP:]):
+                        if idx > last_idx and c < close:
+                            skip = True
+                            break
 
-    levels = detect_flat_span_b(df)
+                if not skip:
+                    if is_high:
+                        high_points.append((time, close, i))
+                        last_pivot = ("high", high, close, i)
+                        direction = -1
+                    else:
+                        low_points.append((time, close, i))
+                        last_pivot = ("low", low, close, i)
+                        direction = 1
 
-    if all_above_100 and macd_bull and cross_up:
-        trend = "قوی صعودی 🔥🔥"
-        suggestion = "لانگ قوی"
-    elif all_above_100 and macd_bull:
-        trend = "صعودی 🟢"
-        suggestion = "لانگ یا هولد"
-    elif all_below_100 and macd_bear:
-        trend = "نزولی 🔴"
-        suggestion = "شورت یا صبر"
-    elif all_below_100 and macd_bear:
-        trend = "قوی نزولی 🛑"
-        suggestion = "شورت قوی"
+    # ترکیب نقاط
+    points = []
+    for t, c, i in high_points:
+        points.append({"time": t, "price": c, "type": "high", "index": i})
+    for t, c, i in low_points:
+        points.append({"time": t, "price": c, "type": "low", "index": i})
+
+    points.sort(key=lambda x: x["index"])
+    return points
+
+def analyze(symbol: str):
+    """تابع اصلی تحلیل تکنیکال - فراخوانی شده از main.py"""
+    symbol = symbol.upper()
+
+    # دریافت قیمت فعلی
+    try:
+        ticker = client.get_symbol_ticker(symbol=symbol + "USDT")
+        current_price = float(ticker["price"])
+    except:
+        current_price = 0.0
+
+    df = fetch_klines(symbol)
+    if df is None or len(df) < 100:
+        return {"error": "داده کافی دریافت نشد"}
+
+    points = zigzag(df)
+
+    if len(points) < 2:
+        key_levels = ["تحلیل ZigZag: نقاط کافی شناسایی نشد."]
     else:
-        trend = "خنثی / رنج ⚪"
-        suggestion = "احتیاط"
+        # آخرین High و Low
+        last_high = None
+        last_low = None
+        for p in reversed(points):
+            if p["type"] == "high" and last_high is None:
+                last_high = p
+            elif p["type"] == "low" and last_low is None:
+                last_low = p
+            if last_high and last_low:
+                break
 
-    rsi_text = f"RSI: {c.RSI:.1f}"
-    if c.RSI > 70: rsi_text += " ➜ اشباع خرید ⚠️"
-    elif c.RSI < 30: rsi_text += " ➜ اشباع فروش ⚠️"
+        key_levels = []
+        for i, p in enumerate(points):
+            emoji = "High" if p["type"] == "high" else "Low"
+            label = "آخرین High" if p is last_high else "آخرین Low" if p is last_low else f"اکستریم {i+1}"
+            key_levels.append(f"{emoji} {label}: <b>{p['price']:,.8f}</b> در {to_shamsi(p['time'])}")
 
-    result = {
-        "symbol": symbol.upper(),
-        "price": f"${c.close:,.2f}",
+        # شروع از کندل ۵۰۰ام (اولین نقطه ممکن)
+        start_price = df.iloc[0]['close']
+        trend = "صعودی" if points and points[-1]["type"] == "high" else "نزولی" if points else "نامشخص"
+        if len(points) >= 2:
+            if points[-2]["type"] == "low" and points[-1]["type"] == "high":
+                trend = "صعودی (Higher High)"
+            elif points[-2]["type"] == "high" and points[-1]["type"] == "low":
+                trend = "نزولی (Lower Low)"
+
+        suggestion = "در حال تشکیل موج جدید" if len(points) < 3 else "منتظر شکست سطوح کلیدی باش"
+
+    return {
+        "symbol": symbol,
+        "price": f"${current_price:,.8f}" if current_price else "نامشخص",
         "trend": trend,
         "suggestion": suggestion,
-        "rsi": rsi_text,
-        "macd": "صعودی 🟢" if macd_bull else "نزولی 🔴" if macd_bear else "خنثی",
-        "key_levels": levels,
-        "time": to_shamsi(datetime.now())
+        "rsi": "در دسترس نیست (در نسخه بعدی)",
+        "macd": "در دسترس نیست (در نسخه بعدی)",
+        "key_levels": key_levels,
+        "time": to_shamsی(datetime.now()),
+        "points_count": len(points)
     }
-
-    CACHE[cache_key] = (df, result, now)
-    return result
