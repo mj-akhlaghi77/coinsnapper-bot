@@ -757,30 +757,76 @@ async def send_pending_renewal_notifications(bot: Bot):
 
 # تابع جدید (تحلیل تکنیکال)
 async def handle_tech_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-  # داخل handle_tech_callback
-result = tech_analyze(symbol)
-
-if "error" in result:
-    text = result["error"]
-else:
-    levels = "\n".join(result.get("key_levels", [])) or "اطلاعات موجود نیست"
-    text = f"""تحلیل اکستریم {result["symbol"]}/USDT (۴ ساعته)
-
-<b>روند فعلی: {result["trend"]}</b>
-{result.get("reference", "")}
-
-{levels}
-"""
-
-await loading_msg.delete()
-await query.message.reply_text(text, parse_mode="HTML")
-async def close_tech_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
+
+    user_id = query.from_user.id
+    subscribed, _ = check_subscription_status(user_id)
+
+    if not subscribed:
+        await query.edit_message_text(
+            "تحلیل تکنیکال پیشرفته فقط برای مشترکین فعال است.\n"
+            "برای فعال‌سازی اشتراک از دکمه «اشتراک و پرداخت» استفاده کن.",
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton("اشتراک و پرداخت", callback_data="subscribe_info")
+            ]])
+        )
+        return
+
+    symbol = query.data[len("tech_"):].upper()
+
+    # پیام لودینگ
+    loading_msg = await query.message.reply_text(
+        f"در حال تحلیل اکستریم‌های {symbol}/USDT (۴ ساعته)... ⏳\n"
+        "از ۳۰۰ کندل آخر با ZigZag (5%)"
+    )
+
     try:
-        await query.message.delete()
-    except:
-        pass
+        result = tech_analyze(symbol)
+
+        if "error" in result:
+            text = f"⚠️ خطا در تحلیل {symbol}:\n{result['error']}"
+        else:
+            levels = "\n".join(result.get("key_levels", []))
+            if not levels:
+                levels = "هیچ سطح کلیدی معتبری شناسایی نشد."
+
+            trend_emoji = "صعودی" if "صعودی" in result["trend"] else \
+                          "نزولی" if "نزولی" in result["trend"] else \
+                          "سایدوی"
+
+            text = f"""تحلیل ساختار قیمتی {result["symbol"]}/USDT
+تایم‌فریم: ۴ ساعته | ZigZag (5%)
+
+<b>روند فعلی: {trend_emoji} {result["trend"]}</b>
+
+<b>نقطه شروع (کلوز کندل ۳۰۰ام):</b>
+{result.get("reference", "نامشخص")}
+
+<b>سطوح کلیدی در جهت روند:</b>
+{levels}
+
+<b>به‌روزرسانی:</b> {to_shamsi(datetime.now())}"""
+
+        # حذف لودینگ و ارسال نتیجه
+        try:
+            await loading_msg.delete()
+        except:
+            pass
+
+        keyboard = [[InlineKeyboardButton("بستن", callback_data="close_tech")]]
+        await query.message.reply_text(
+            text.strip(),
+            parse_mode="HTML",
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            disable_web_page_preview=True
+        )
+
+    except Exception as e:
+        try:
+            await loading_msg.edit_text(f"خطا در پردازش تحلیل: {str(e)}")
+        except:
+            pass
 
 
 
