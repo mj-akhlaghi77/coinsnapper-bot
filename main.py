@@ -758,50 +758,23 @@ async def send_pending_renewal_notifications(bot: Bot):
 
 # تابع جدید (تحلیل تکنیکال)
 async def handle_tech_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-    
-    user_id = query.from_user.id
-    subscribed, _ = check_subscription_status(user_id)
-    
-    if not subscribed:
-        await query.edit_message_text("🚫 تحلیل تکنیکال فقط برای مشترکین فعاله!")
-        return
+  # داخل handle_tech_callback
+result = tech_analyze(symbol)
 
-    symbol = query.data[len("tech_"):].upper()
-    
-    loading_msg = await query.message.reply_text("در حال تحلیل تکنیکال ۴ ساعته... ⏳")
+if "error" in result:
+    text = result["error"]
+else:
+    levels = "\n".join(result.get("key_levels", [])) or "اطلاعات موجود نیست"
+    text = f"""تحلیل اکستریم {result["symbol"]}/USDT (۴ ساعته)
 
-    result = tech_analyze(symbol)
+<b>روند فعلی: {result["trend"]}</b>
+{result.get("reference", "")}
 
-    if "error" in result:
-        await loading_msg.edit_text("موقتی در دسترس نیست — بعداً امتحان کن")
-        return
+{levels}
+"""
 
-    levels_text = "\n".join([f"   • {lvl}" for lvl in result["key_levels"]]) if result["key_levels"] else "   • مشخص نیست"
-    text = f"""
-    <b>تحلیل تکنیکال {result["symbol"]}/USDT</b>
-    تایم‌فریم: ۴ ساعته
-
-    💵 قیمت فعلی: {result["price"]}
-    🔥 روند کلی: {result["trend"]}
-    🤖 پیشنهاد: {result["suggestion"]}
-
-    📊 {result["rsi"]}
-    📈 وضعیت MACD: {result["macd"]}
-
-    🔑 سطوح کلیدی (فلت Span B):
-    {levels_text}
-
-    🕐 {result["time"]}
-     """.strip()
-
-        
-
-    keyboard = [[InlineKeyboardButton("بستن", callback_data="close_tech")]]
-    await loading_msg.delete()
-    await query.message.reply_text(text, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(keyboard))
-
+await loading_msg.delete()
+await query.message.reply_text(text, parse_mode="HTML")
 async def close_tech_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
