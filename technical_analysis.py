@@ -1,145 +1,124 @@
-# technical_analysis.py - نسخه حرفه‌ای و دقیق بر اساس توضیحات شما
-from binance.client import Client
+# اضافه کن به technical_analysis.py
 import pandas as pd
+import numpy as np
 from datetime import datetime
-import jdatetime
 
-client = Client()
+def _find_local_extrema(prices, depth):
+    """
+    local extrema: نقطه‌ای که در بازه depth قبل و بعد خود بیشترین/کمترین باشد.
+    برمی‌گرداند لیستی از تاپل‌ها: (index, price, 'high'|'low')
+    """
+    n = len(prices)
+    extrema = []
+    for i in range(depth, n - depth):
+        window = prices[i - depth: i + depth + 1]
+        val = prices[i]
+        if val == max(window):
+            extrema.append((i, val, 'high'))
+        elif val == min(window):
+            extrema.append((i, val, 'low'))
+    return extrema
 
-def to_shamsi(dt):
-    try:
-        return jdatetime.datetime.fromgregorian(datetime=dt).strftime("%Y/%m/%d - %H:%M")
-    except:
-        return dt.strftime("%Y-%m-%d %H:%M")
+def _apply_backstep_and_deviation(extrema, backstep, deviation_pct):
+    """
+    حذف یا ادغام اکستریماهای نزدیک (backstep) و اعمال حداقل deviation در درصد
+    خروجی: فهرست فیلترشده‌ی اکستریما به ترتیب زمانی
+    """
+    if not extrema:
+        return []
 
-def analyze(symbol: str):
-    symbol = symbol.upper() + "USDT"
-    
-    try:
-        klines = client.get_klines(symbol=symbol, interval="4h", limit=300)
-        if len(klines) < 300:
-            return {"error": "داده کافی نیست"}
+    filtered = []
+    for idx, price, typ in extrema:
+        if not filtered:
+            filtered.append([idx, price, typ])
+            continue
 
-        df = pd.DataFrame(klines, columns=[
-            'timestamp', 'open', 'high', 'low', 'close', 'volume',
-            'close_time', 'qav', 'trades', 'tbb', 'tbq', 'ignore'
-        ])
-        df['close'] = pd.to_numeric(df['close'])
-        df['high'] = pd.to_numeric(df['high'])
-        df['low'] = pd.to_numeric(df['low'])
-        df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
+        last_idx, last_price, last_typ = filtered[-1]
+        # اگر هم‌نوع و نزدیک‌تر از backstep باشند: نگه دار قوی‌تر (برای high => بزرگتر، برای low => کوچکتر)
+        if typ == last_typ and abs(idx - last_idx) <= backstep:
+            if typ == 'high':
+                if price > last_price:
+                    filtered[-1] = [idx, price, typ]
+            else:  # low
+                if price < last_price:
+                    filtered[-1] = [idx, price, typ]
+            continue
 
-        # نقطه مرجع: کلوز کندل شماره ۳۰۰ از آخر
-        reference_price = df['close'].iloc[0]
-        ref_time = df['timestamp'].iloc[0]
+        # اگر اختلاف قیمت کمتر از deviation_pct نسبت به آخرین اکستریم باشه، نادیده بگیر
+        rel_change = abs(price - last_price) / last_price * 100.0 if last_price != 0 else 100.0
+        if rel_change < deviation_pct:
+            # در صورتی که نوع متفاوت است، ممکنه بخواهیم جایگزین کنیم (اما برای سادگی نادیده می‌گیریم)
+            # این شرط باعث میشه اکستریماهای خیلی کوچک حذف بشن
+            continue
 
-        # تنظیمات ZigZag
-        depth = 12
-        deviation = 0.05
-        backstep = 3
+        filtered.append([idx, price, typ])
 
-        pivots = []
-        last_pivot_price = None
-        last_pivot_type = None
+    # تبدیل به tuples
+    return [(i, p, t) for i, p, t in filtered]
 
-        for i in range(depth, len(df)):
-            high = df['high'].iloc[i]
-            low = df['low'].iloc[i]
-            close = df['close'].iloc[i]
+def analyze_from_df(df, depth=12, deviation=5, backstep=3):
+    """
+    ورودی: df با ستون 'close' و ایندکس زمانی یا شماره‌ای (صعودی)
+    خروجی: dict شامل {'trend': 'صعودی'|'نزولی'|'سایدوی', 'extrema': [...], 'reason': '...'}
+    منطق:
+      - اکستریما با پنجره depth پیدا میشه
+      - پس از اعمال backstep و deviation، اگر آخرین high نسبت به قبلی high بالاتر باشه و آخرین low نسبت به قبلی low بالاتر باشه => صعودی
+      - اگر برعکس باشه => نزولی
+      - اگر در 50 کندل آخر هیچ اکستریمی که بالاتر از آخرین high یا پایین‌تر از آخرین low باشه تشکیل نشده باشه => سایدوی
+    """
+    prices = df['close'].values
+    n = len(prices)
+    if n < depth * 2 + 1:
+        return {"trend": "نامشخص", "extrema": [], "reason": "دیتای کافی نیست"}
 
-            is_high = high == df['high'].iloc[i-depth:i+depth+1].max()
-            is_low = low == df['low'].iloc[i-depth:i+depth+1].min()
+    raw_ext = _find_local_extrema(prices, depth)
+    ext = _apply_backstep_and_deviation(raw_ext, backstep, deviation)
 
-            if not (is_high or is_low):
-                continue
+    # جدا کردن highs و lows
+    highs = [e for e in ext if e[2] == 'high']
+    lows = [e for e in ext if e[2] == 'low']
 
-            if last_pivot_price is None:
-                pivots.append({"price": close, "type": "high" if is_high else "low", "index": i})
-                last_pivot_price = close
-                last_pivot_type = "high" if is_high else "low"
-                continue
+    trend = "نامشخص"
+    reason = ""
 
-            change = (close - last_pivot_price) / last_pivot_price if last_pivot_price else 0
-
-            if (last_pivot_type == "high" and is_low and change <= -deviation) or \
-               (last_pivot_type == "low" and is_high and change >= deviation):
-
-                # Backstep
-                valid = True
-                recent_same = [p for p in pivots[-backstep:] if p["type"] == last_pivot_type]
-                for p in recent_same:
-                    if (last_pivot_type == "high" and close > p["price"]) or \
-                       (last_pivot_type == "low" and close < p["price"]):
-                        valid = False
-                        break
-
-                if valid:
-                    pivots.append({"price": close, "type": "high" if is_high else "low", "index": i})
-                    last_pivot_price = close
-                    last_pivot_type = "high" if is_high else "low"
-
-        if len(pivots) < 2:
-            return {"trend": "سایدوی", "levels": ["هیچ اکستریم معتبری تشکیل نشده"]}
-
-        # آخرین ۵۰ کندل برای تشخیص سایدوی
-        last_50_candles = df.iloc[-50:]
-        last_pivot_time = df['timestamp'].iloc[pivots[-1]["index"]]
-
-        if (df['timestamp'].iloc[-1] - last_pivot_time).total_seconds() / 3600 > 50 * 4:
-            return {"trend": "سایدوی (رنج)", "levels": ["بیش از ۵۰ کندل بدون اکستریم جدید"]}
-
-        # تعیین روند اصلی
-        highs = [p["price"] for p in pivots if p["type"] == "high"]
-        lows = [p["price"] for p in pivots if p["type"] == "low"]
-
-        # روند صعودی: HH + HL
-        # روند نزولی: LH + LL
-        trend = "نامشخص"
-        final_levels = []
-
-        if len(highs) >= 2 and len(lows) >= 2:
-            last_high = highs[-1]
-            prev_high = highs[-2]
-            last_low = lows[-1]
-            prev_low = lows[-2]
-
-            if last_high > prev_high and last_low > prev_low:
-                trend = "صعودی"
-                # فقط Higher High ها
-                current_hh = reference_price
-                for h in highs:
-                    if h > current_hh:
-                        final_levels.append(h)
-                        current_hh = h
-
-            elif last_high < prev_high and last_low < prev_low:
-                trend = "نزولی"
-                # فقط Lower Low ها
-                current_ll = reference_price
-                for l in lows:
-                    if l < current_ll:
-                        final_levels.append(l)
-                        current_ll = l
-            else:
-                trend = "سایدوی (تغییر روند)"
-                final_levels = [p["price"] for p in pivots[-4:]]  # آخرین ۴ اکستریم
-
+    # قاعده صعودی / نزولی ساده:
+    if len(highs) >= 2 and len(lows) >= 2:
+        if highs[-1][1] > highs[-2][1] and lows[-1][1] > lows[-2][1]:
+            trend = "قوی صعودی"
+            reason = "higher highs و higher lows تشکیل شده‌اند"
+        elif highs[-1][1] < highs[-2][1] and lows[-1][1] < lows[-2][1]:
+            trend = "قوی نزولی"
+            reason = "lower highs و lower lows تشکیل شده‌اند"
         else:
-            trend = "در حال تشکیل"
-            final_levels = [p["price"] for p in pivots]
+            trend = "نامشخص"
+            reason = "الگوی highs/lows صریح نیست"
+    else:
+        trend = "نامشخص"
+        reason = "تعداد اکستریماها کافی نیست"
 
-        if not final_levels:
-            final_levels = [p["price"] for p in pivots[-3:]]
+    # قاعده سایدوی: اگر طی 50 کندل اخیر هیچ اکستریمی که بالاتر از آخرین high یا پایین‌تر از آخرین low باشه شکل نگرفته باشه => سایدوی
+    last_index = n - 1
+    window_start_idx = max(0, n - 50)
+    # اکستریماهایی که در 50 کندل آخر قرار دارند:
+    recent_ext = [e for e in ext if e[0] >= window_start_idx]
+    is_side = True
+    if highs:
+        last_high_price = highs[-1][1]
+        # آیا در recent_ext high ای بالاتر از last_high_price هست؟
+        for i, p, t in recent_ext:
+            if t == 'high' and p > last_high_price:
+                is_side = False
+                break
+    if lows and is_side:
+        last_low_price = lows[-1][1]
+        for i, p, t in recent_ext:
+            if t == 'low' and p < last_low_price:
+                is_side = False
+                break
 
-        # فرمت نهایی
-        level_texts = [f"{price:,.8f}".rstrip('0').rstrip('.') for price in final_levels]
+    if is_side and recent_ext:
+        # اگر واقعاً در 50 کندل اخیر هیچ اکستریمی تغییر‌دهنده نبوده => سایدوی
+        trend = "سایدوی"
+        reason = "طی ۵۰ کندل اخیر اکستریم جدید صعودی یا نزولی تشکیل نشد"
 
-        return {
-            "symbol": symbol.replace("USDT", ""),
-            "trend": trend,
-            "reference": f"نقطه شروع: {reference_price:,.8f}",
-            "key_levels": level_texts
-        }
-
-    except Exception as e:
-        return {"error": f"خطا: {str(e)}"}
+    return {"trend": trend, "extrema": ext, "reason": reason}
