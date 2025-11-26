@@ -1,15 +1,12 @@
-# technical_analysis.py - نسخه حرفه‌ای با زیگزاگ + نمایش تمام نقاط اکستریم
+# technical_analysis.py - نسخه نهایی: دقیقاً مثل Display reversal price تریدینگ‌ویو
 import time
 import pandas as pd
-import numpy as np
 from binance.client import Client
 from datetime import datetime
 import jdatetime
 
-# تنظیمات کش
 CACHE = {}
-CACHE_TTL = 300  # ۵ دقیقه
-
+CACHE_TTL = 300
 client = Client()
 
 def to_shamsi(dt):
@@ -20,55 +17,43 @@ def to_shamsi(dt):
 
 
 def zig_zag(df, depth=12, deviation=5, backstep=3):
-    high = df['high'].values
-    low = df['low'].values
     close = df['close'].values
-
     pivots = []
     last_pivot_idx = 0
     last_pivot_price = close[0]
-    last_pivot_type = None
+    direction = 0  # 1 = صعودی، -1 = نزولی
 
     deviation /= 100.0
 
     for i in range(1, len(df)):
-        if len(pivots) == 0:
-            pivots.append((0, close[0], 'none'))
-            continue
+        current_price = close[i]
 
-        # پیک صعودی
-        if close[i] > last_pivot_price:
-            potential_high = high[i]
-            if (potential_high - last_pivot_price) / last_pivot_price >= deviation:
-                valid = True
-                for j in range(max(last_pivot_idx + depth, i - backstep), i):
-                    if high[j] >= potential_high:
-                        valid = False
-                        break
-                if valid:
-                    while len(pivots) > 1 and pivots[-1][1] < potential_high and (i - pivots[-1][0]) >= depth:
-                        pivots.pop()
-                    pivots.append((i, potential_high, 'high'))
-                    last_pivot_idx = i
-                    last_pivot_price = potential_high
-                    last_pivot_type = 'high'
+        if direction >= 0:  # منتظر پیک صعودی یا شروع
+            if current_price > last_pivot_price:
+                potential_high = current_price
+                if (potential_high - last_pivot_price) / last_pivot_price >= deviation:
+                    # چک backstep
+                    valid = all(close[j] <= potential_high for j in range(max(last_pivot_idx + depth, i - backstep), i))
+                    if valid:
+                        while len(pivots) > 1 and pivots[-1][1] <= potential_high and (i - pivots[-1][0]) >= depth:
+                            pivots.pop()
+                        pivots.append((i, potential_high, 'high'))
+                        last_pivot_idx = i
+                        last_pivot_price = potential_high
+                        direction = -1  # حالا دنبال ولی هستیم
 
-        # ولی نزولی
-        elif close[i] < last_pivot_price:
-            potential_low = low[i]
-            if (last_pivot_price - potential_low) / last_pivot_price >= deviation:
-                valid = True
-                for j in range(max(last_pivot_idx + depth, i - backstep), i):
-                    if low[j] <= potential_low:
-                        valid = False
-                        break
-                if valid:
-                    while len(pivots) > 1 and pivots[-1][1] > potential_low and (i - pivots[-1][0]) >= depth:
-                        pivots.pop()
-                    pivots.append((i, potential_low, 'low'))
-                    last_pivot_idx = i
-                    last_pivot_price = potential_low
-                    last_pivot_type = 'low'
+        if direction <= 0:  # منتظر ولی نزولی یا شروع
+            if current_price < last_pivot_price:
+                potential_low = current_price
+                if (last_pivot_price - potential_low) / last_pivot_price >= deviation:
+                    valid = all(close[j] >= potential_low for j in range(max(last_pivot_idx + depth, i - backstep), i))
+                    if valid:
+                        while len(pivots) > 1 and pivots[-1][1] >= potential_low and (i - pivots[-1][0]) >= depth:
+                            pivots.pop()
+                        pivots.append((i, potential_low, 'low'))
+                        last_pivot_idx = i
+                        last_pivot_price = potential_low
+                        direction = 1  # حالا دنبال پیک هستیم
 
     return pivots
 
@@ -80,12 +65,11 @@ def get_klines(symbol: str, interval: str = "4h", limit: int = 1000):
             'timestamp', 'open', 'high', 'low', 'close', 'volume',
             'close_time', 'quote_volume', 'trades', 'tb_base', 'tb_quote', 'ignore'
         ])
-        for col in ['open', 'high', 'low', 'close', 'volume']:
-            df[col] = pd.to_numeric(df[col])
+        df['close'] = pd.to_numeric(df['close'])
         df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
-        return df
+        return df[['timestamp', 'close']]
     except Exception as e:
-        print(f"خطا در دریافت داده از بایننس: {e}")
+        print(f"خطا در دریافت دیتا: {e}")
         return None
 
 
@@ -98,83 +82,49 @@ def analyze(symbol: str, interval: str = "4h") -> dict:
 
     df = get_klines(symbol.upper(), interval, limit=1000)
     if df is None or len(df) < 300:
-        return {"error": "دیتای کافی دریافت نشد"}
+        return {"error": "دیتا کافی نیست"}
 
     df_recent = df.iloc[-300:].reset_index(drop=True)
 
-    # نقطه شروع زیگزاگ
+    # نقطه شروع: کلوز کندل ۳۰۰ام قبل
     start_price = df_recent.iloc[0]['close']
     start_time = to_shamsi(df_recent.iloc[0]['timestamp'])
 
     pivots = zig_zag(df_recent, depth=12, deviation=5, backstep=3)
 
-    if len(pivots) < 3:
-        trend = "نامشخص (داده کم)"
+    # تمام نقاط زیگزاگ (از نقطه دوم به بعد)
+    reversal_prices = []
+    for i, (idx, price, ptype) in enumerate(pivots[1:], start=1):
+        t = to-Marc_shamsi(df_recent.iloc[idx]['timestamp'])
+        arrow = "Up" if ptype == 'high' else "Down"
+        reversal_prices.append(f"{arrow} نقطه #{i}: ${price:,.2f} — {t}")
+
+    # تشخیص روند
+    if len(reversal_prices) < 2:
+        trend = "نامشخص"
         suggestion = "صبر کن"
-        extreme_points = []
-        total_extremes = 0
     else:
-        last_pivot = pivots[-1]
-        prev_pivot = pivots[-2]
-        last_idx = last_pivot[0]
-        last_price = last_pivot[1]
-        last_type = last_pivot[2]
-
-        # تشخیص ساید وی
-        if (len(df_recent) - 1 - last_idx) > 50:
-            trend = "ساید وی (رنج)"
-            suggestion = "احتیاط - بازار در استراحت"
-        elif last_type == 'high' and last_price > prev_pivot[1]:
-            trend = "صعودی قوی"
+        last_two = reversal_prices[-2:]
+        if "Up" in last_two[-1] and "Down" in last_two[-2]:
+            trend = "صعودی"
             suggestion = "لانگ یا هولد"
-        elif last_type == 'low' and last_price < prev_pivot[1]:
-            trend = "نزولی قوی"
+        elif "Down" in last_two[-1] and "Up" in last_two[-2]:
+            trend = "نزولی"
             suggestion = "شورت یا صبر"
-        elif last_type == 'high' and last_price < prev_pivot[1]:
-            trend = "صعودی (در حال اصلاح)"
-            suggestion = "لانگ با احتیاط"
-        elif last_type == 'low' and last_price > prev_pivot[1]:
-            trend = "نزولی (در حال اصلاح)"
-            suggestion = "شورت با احتیاط"
         else:
-            trend = "خنثی / رنج"
+            trend = "رنج / ساید وی"
             suggestion = "احتیاط"
-
-        # تمام نقاط اکستریم (از نقطه دوم به بعد)
-        extreme_points = []
-        for i, (idx, price, ptype) in enumerate(pivots[1:], start=1):
-            t = to_shamsi(df_recent.iloc[idx]['timestamp'])
-            if ptype == 'high':
-                extreme_points.append(f"پیک صعودی #{i}: ${price:,.2f} — {t}")
-            elif ptype == 'low':
-                extreme_points.append(f"ولی نزولی #{i}: ${price:,.2f} — {t}")
-
-        total_extremes = len(extreme_points)
-
-    # RSI
-    close = df_recent['close']
-    delta = close.diff()
-    gain = delta.where(delta > 0, 0).rolling(14).mean()
-    loss = -delta.where(delta < 0, 0).rolling(14).mean()
-    rs = gain / loss
-    rsi_val = 100 - (100 / (1 + rs)).iloc[-1] if len(rs) > 0 and not pd.isna(rs.iloc[-1]) else 50
-    rsi_text = f"RSI (14): {rsi_val:.1f}"
-    if rsi_val > 70:
-        rsi_text += " → اشباع خرید"
-    elif rsi_val < 30:
-        rsi_text += " → اشباع فروش"
 
     result = {
         "symbol": symbol.upper(),
         "price": f"${df_recent['close'].iloc[-1]:,.2f}",
         "trend": trend,
         "suggestion": suggestion,
-        "rsi": rsi_text,
-        "start_point": f"کلوز کندل ۳۰۰ام قبل: ${start_price:,.2f} — {start_time}",
-        "extreme_points": extreme_points,
-        "total_extremes": total_extremes,
+        "start_point": f"شروع از: ${start_price:,.2f} — {start_time}",
+        "reversal_prices": reversal_prices[::-1],  # جدید → قدیم
+        "total_points": len(reversal_prices),
         "time": to_shamsi(datetime.now()),
     }
 
-    CACHE[cache_key] = (df_recent, result, now)
+    CACHE[cache_key]	al = (df_recent, result, now)
     return result
