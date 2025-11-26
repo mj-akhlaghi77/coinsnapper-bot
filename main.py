@@ -794,7 +794,7 @@ async def handle_tech_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     symbol = query.data[len("tech_"):].upper()
 
     loading_msg = await query.message.reply_text(
-        f"در حال تحلیل {symbol}/USDT با زیگزاگ حرفه‌ای...\nاز ۳۰۰ کندل آخر ۴ ساعته"
+        f"در حال تحلیل حرفه‌ای {symbol}/USDT...\nاز ۳۰۰ کندل آخر ۴ ساعته با الگوریتم زیگزاگ"
     )
 
     try:
@@ -804,10 +804,10 @@ async def handle_tech_callback(update: Update, context: ContextTypes.DEFAULT_TYP
         await loading_msg.delete()
 
         if "error" in result:
-            await query.message.reply_text(f"دیتا برای {symbol} دریافت نشد. دوباره امتحان کن.")
+            await query.message.reply_text(f"دیتا برای {symbol} دریافت نشد.\nدقایقی دیگر دوباره امتحان کن.")
             return
 
-        # نمایش آخرین ۶ اکستریم
+        # آخرین ۶ اکستریم
         extremes = result["extreme_points"][-6:] if len(result["extreme_points"]) > 6 else result["extreme_points"]
         extremes_text = "\n".join(extremes) if extremes else "در حال تشکیل..."
 
@@ -819,12 +819,12 @@ async def handle_tech_callback(update: Update, context: ContextTypes.DEFAULT_TYP
 
 قیمت فعلی: <b>{result["price"]}</b>
 روند کلی: <b>{result["trend"]}</b>
-پیشنهاد: <b>{result["suggestion"]}</b>
+پیشنهاد معاملاتی: <b>{result["suggestion"]}</b>
 
 <b>نقطه شروع زیگزاگ:</b>
 → {result["start_point"]}
 
-<b>آخرین اکستریم‌ها (جدید به قدیم):</b>
+<b>آخرین اکستریم‌ها (جدید → قدیم):</b>
 {extremes_text}
 
 تعداد کل اکستریم‌ها: <b>{result["total_extremes"]}</b>
@@ -843,9 +843,11 @@ async def handle_tech_callback(update: Update, context: ContextTypes.DEFAULT_TYP
 
     except Exception as e:
         print(f"خطا در تحلیل تکنیکال {symbol}: {e}")
-        await loading_msg.delete()
+        try:
+            await loading_msg.delete()
+        except:
+            pass
         await query.message.reply_text("خطایی رخ داد. دوباره امتحان کن.")
-
 
 # هندلر بستن تحلیل تکنیکال
 async def close_tech_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
