@@ -1,3 +1,23 @@
+# technical_analysis.py - نسخه حرفه‌ای با زیگزاگ + نمایش نقاط اکستریم
+import time
+import pandas as pd
+import numpy as np
+from binance.client import Client
+from datetime import datetime
+import jdatetime
+
+# تنظیمات کش
+CACHE = {}
+CACHE_TTL = 300  # ۵ دقیقه
+
+client = Client()
+
+def to_shamsi(dt):
+    try:
+        return jdatetime.datetime.fromgregorian(datetime=dt).strftime("%Y/%m/%d - %H:%M")
+    except:
+        return dt.strftime("%Y-%m-%d %H:%M")
+
 def analyze(symbol: str, interval: str = "4h") -> dict:
     cache_key = f"{symbol.upper()}_{interval}"
     now = time.time()
