@@ -780,64 +780,66 @@ async def handle_tech_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     )
 
     # فراخوانی تحلیل جدید (زیگزاگ)
+    async def handle_tech_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+
+    user_id = query.from_user.id
+    subscribed, _ = check_subscription_status(user_id)
+
+    if not subscribed:
+        await query.edit_message_text("تحلیل تکنیکال پیشرفته فقط برای مشترکین فعاله!")
+        return
+
+    symbol = query.data[len("tech_"):].upper()
+
+    loading_msg = await query.message.reply_text(
+        f"در حال تحلیل {symbol}/USDT با زیگزاگ حرفه‌ای...\nاز ۳۰۰ کندل آخر ۴ ساعته ⏳"
+    )
+
     from technical_analysis import analyze as tech_analyze
     result = tech_analyze(symbol)
 
-    # حذف پیام لودینگ
     try:
         await loading_msg.delete()
     except:
         pass
 
     if "error" in result:
-        await query.message.reply_text(
-            f"خطا در دریافت داده‌های بایننس برای {symbol}\n"
-            "دقایقی دیگه دوباره امتحان کن یا نماد رو چک کن."
-        )
+        await query.message.reply_text(f"دیتا برای {symbol} دریافت نشد. دوباره امتحان کن.")
         return
 
-    # آماده‌سازی متن خروجی
-    trend_emoji = {
-        "صعودی قوی": "Strong Up",
-        "صعودی": "Up",
-        "نزولی قوی": "Strong Down",
-        "نزولی": "Down",
-        "ساید وی": "Sideways",
-        "خنثی": "Neutral",
-        "نامشخص": "Question"
-    }.get(result["trend"].split()[0], "Neutral")
+    # محدود کردن تعداد نقاط نمایش داده شده (حداکثر ۶ تا آخر)
+    extremes = result["extreme_points"][-6:] if len(result["extreme_points"]) > 6 else result["extreme_points"]
+    extremes_text = "\n".join(extremes) if extremes else "در حال تشکیل..."
 
     text = f"""
-<b>تحلیل تکنیکال پیشرفته {result["symbol"]}/USDT</b>
+<b>تحلیل تکنیکال حرفه‌ای {result["symbol"]}/USDT</b>
 
 تایم‌فریم: ۴ ساعته (۳۰۰ کندل اخیر)
-روش تشخیص روند: <b>زیگزاگ حرفه‌ای (Depth 12 | Deviation 5%)</b>
+روش: <b>زیگزاگ واقعی (Depth 12 • Deviation 5%)</b>
 
 قیمت فعلی: <b>{result["price"]}</b>
 روند کلی: <b>{result["trend"]}</b>
-پیشنهاد معاملاتی: <b>{result["suggestion"]}</b>
+پیشنهاد: <b>{result["suggestion"]}</b>
 
-آخرین اکستریم زیگزاگ:
-→ {result.get("last_pivot", "نامشخص")}
+<b>نقطه شروع زیگزاگ:</b>
+→ {result["start_point"]}
 
-تعداد نقاط کلیدی زیگزاگ: <b>{result.get("zigzag_points", 0)}</b>
+<b>آخرین اکستریم‌ها (جدید به قدیم):</b>
+{extremes_text}
 
+تعداد کل اکستریم‌ها: <b>{result["total_extremes"]}</b>
 {result["rsi"]}
-
-سطوح مهم:
-""" + "\n".join([f"   • {level}" for level in result.get("key_levels", ["در حال تشکیل..."])]) + f"""
 
 {result["time"]}
     """.strip()
 
-    # دکمه بستن
     keyboard = [[InlineKeyboardButton("بستن", callback_data="close_tech")]]
-    reply_markup = InlineKeyboardMarkup(keyboard)
-
     await query.message.reply_text(
         text,
         parse_mode="HTML",
-        reply_markup=reply_markup,
+        reply_markup=InlineKeyboardMarkup(keyboard),
         disable_web_page_preview=True
     )
 
