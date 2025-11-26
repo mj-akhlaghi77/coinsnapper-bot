@@ -843,7 +843,7 @@ async def handle_tech_callback(update: Update, context: ContextTypes.DEFAULT_TYP
 
 
 # هندلر بستن تحلیل تکنیکال
-async def handle_close_tech(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def close_tech_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     try:
