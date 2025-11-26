@@ -794,26 +794,24 @@ async def handle_tech_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     symbol = query.data[len("tech_"):].upper()
 
     loading_msg = await query.message.reply_text(
-        f"در حال تحلیل {symbol}/USDT با زیگزاگ حرفه‌ای...\nاز ۳۰۰ کندل آخر ۴ ساعته ⏳"
+        f"در حال تحلیل {symbol}/USDT با زیگزاگ حرفه‌ای...\nاز ۳۰۰ کندل آخر ۴ ساعته"
     )
 
-    from technical_analysis import analyze as tech_analyze
-    result = tech_analyze(symbol)
-
     try:
+        from technical_analysis import analyze as tech_analyze
+        result = tech_analyze(symbol)
+
         await loading_msg.delete()
-    except:
-        pass
 
-    if "error" in result:
-        await query.message.reply_text(f"دیتا برای {symbol} دریافت نشد. دوباره امتحان کن.")
-        return
+        if "error" in result:
+            await query.message.reply_text(f"دیتا برای {symbol} دریافت نشد. دوباره امتحان کن.")
+            return
 
-    # محدود کردن تعداد نقاط نمایش داده شده (حداکثر ۶ تا آخر)
-    extremes = result["extreme_points"][-6:] if len(result["extreme_points"]) > 6 else result["extreme_points"]
-    extremes_text = "\n".join(extremes) if extremes else "در حال تشکیل..."
+        # نمایش آخرین ۶ اکستریم
+        extremes = result["extreme_points"][-6:] if len(result["extreme_points"]) > 6 else result["extreme_points"]
+        extremes_text = "\n".join(extremes) if extremes else "در حال تشکیل..."
 
-    text = f"""
+        text = f"""
 <b>تحلیل تکنیکال حرفه‌ای {result["symbol"]}/USDT</b>
 
 تایم‌فریم: ۴ ساعته (۳۰۰ کندل اخیر)
@@ -833,15 +831,20 @@ async def handle_tech_callback(update: Update, context: ContextTypes.DEFAULT_TYP
 {result["rsi"]}
 
 {result["time"]}
-    """.strip()
+        """.strip()
 
-    keyboard = [[InlineKeyboardButton("بستن", callback_data="close_tech")]]
-    await query.message.reply_text(
-        text,
-        parse_mode="HTML",
-        reply_markup=InlineKeyboardMarkup(keyboard),
-        disable_web_page_preview=True
-    )
+        keyboard = [[InlineKeyboardButton("بستن", callback_data="close_tech")]]
+        await query.message.reply_text(
+            text,
+            parse_mode="HTML",
+            reply_markup=InlineKeyboardMarkup(keyboard),
+            disable_web_page_preview=True
+        )
+
+    except Exception as e:
+        print(f"خطا در تحلیل تکنیکال {symbol}: {e}")
+        await loading_msg.delete()
+        await query.message.reply_text("خطایی رخ داد. دوباره امتحان کن.")
 
 
 # هندلر بستن تحلیل تکنیکال
