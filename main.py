@@ -791,7 +791,7 @@ async def handle_tech_callback(update: Update, context: ContextTypes.DEFAULT_TYP
         extremes = result["extreme_points"][-6:] if len(result["extreme_points"]) > 6 else result["extreme_points"]
         extremes_text = "\n".join(extremes) if extremes else "در حال تشکیل..."
 
-            text = f"""
+        text = f"""
 <b>تحلیل زیگزاگ حرفه‌ای {result["symbol"]}/USDT</b>
 
 قیمت فعلی: <b>{result["price"]}</b>
