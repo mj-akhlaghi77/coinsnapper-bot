@@ -176,7 +176,7 @@ def analyze(symbol: str, interval: str = "4h") -> dict:
         "rsi": rsi_text,
         "macd": "غیرفعال (زیگزاگ فعال)",
         "key_levels": [f"آخرین اکستریم: {last_extreme}"] if 'last_extreme' in locals() else ["نامشخص"],
-        "time": to_shamsی(datetime.now()),
+        "time": to_shamsi(datetime.now()),
         "zigzag_points": len(pivots),
         "last_pivot": last_extreme if 'last_extreme' in locals() else "نامشخص"
     }
