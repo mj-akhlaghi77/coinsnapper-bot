@@ -773,26 +773,6 @@ async def handle_tech_callback(update: Update, context: ContextTypes.DEFAULT_TYP
 
     symbol = query.data[len("tech_"):].upper()
 
-    # پیام لودینگ
-    loading_msg = await query.message.reply_text(
-        f"در حال تحلیل تکنیکال {symbol}/USDT با الگوریتم زیگزاگ...\n"
-        "از ۳۰۰ کندل آخر ۴ ساعته استفاده می‌شه ⏳"
-    )
-
-    # فراخوانی تحلیل جدید (زیگزاگ)
-    async def handle_tech_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    await query.answer()
-
-    user_id = query.from_user.id
-    subscribed, _ = check_subscription_status(user_id)
-
-    if not subscribed:
-        await query.edit_message_text("تحلیل تکنیکال پیشرفته فقط برای مشترکین فعاله!")
-        return
-
-    symbol = query.data[len("tech_"):].upper()
-
     loading_msg = await query.message.reply_text(
         f"در حال تحلیل حرفه‌ای {symbol}/USDT...\nاز ۳۰۰ کندل آخر ۴ ساعته با الگوریتم زیگزاگ"
     )
@@ -848,7 +828,6 @@ async def handle_tech_callback(update: Update, context: ContextTypes.DEFAULT_TYP
         except:
             pass
         await query.message.reply_text("خطایی رخ داد. دوباره امتحان کن.")
-
 # هندلر بستن تحلیل تکنیکال
 async def close_tech_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
