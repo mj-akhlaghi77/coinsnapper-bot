@@ -6,7 +6,7 @@ from datetime import datetime
 import jdatetime
 
 CACHE = {}
-CACHE_TTL = 300
+CACHE_TTL = 300  # 5 دقیقه کش
 client = Client()
 
 def to_shamsi(dt):
@@ -28,11 +28,10 @@ def zig_zag(df, depth=12, deviation=5, backstep=3):
     for i in range(1, len(df)):
         current_price = close[i]
 
-        if direction >= 0:  # منتظر پیک صعودی یا شروع
+        if direction >= 0:  # منتظر پیک صعودی
             if current_price > last_pivot_price:
                 potential_high = current_price
                 if (potential_high - last_pivot_price) / last_pivot_price >= deviation:
-                    # چک backstep
                     valid = all(close[j] <= potential_high for j in range(max(last_pivot_idx + depth, i - backstep), i))
                     if valid:
                         while len(pivots) > 1 and pivots[-1][1] <= potential_high and (i - pivots[-1][0]) >= depth:
@@ -40,9 +39,9 @@ def zig_zag(df, depth=12, deviation=5, backstep=3):
                         pivots.append((i, potential_high, 'high'))
                         last_pivot_idx = i
                         last_pivot_price = potential_high
-                        direction = -1  # حالا دنبال ولی هستیم
+                        direction = -1
 
-        if direction <= 0:  # منتظر ولی نزولی یا شروع
+        if direction <= 0:  # منتظر ولی نزولی
             if current_price < last_pivot_price:
                 potential_low = current_price
                 if (last_pivot_price - potential_low) / last_pivot_price >= deviation:
@@ -53,7 +52,7 @@ def zig_zag(df, depth=12, deviation=5, backstep=3):
                         pivots.append((i, potential_low, 'low'))
                         last_pivot_idx = i
                         last_pivot_price = potential_low
-                        direction = 1  # حالا دنبال پیک هستیم
+                        direction = 1
 
     return pivots
 
@@ -69,7 +68,7 @@ def get_klines(symbol: str, interval: str = "4h", limit: int = 1000):
         df['timestamp'] = pd.to_datetime(df['timestamp'], unit='ms')
         return df[['timestamp', 'close']]
     except Exception as e:
-        print(f"خطا در دریافت دیتا: {e}")
+        print(f"خطا در دریافت دیتا از بایننس: {e}")
         return None
 
 
@@ -92,10 +91,10 @@ def analyze(symbol: str, interval: str = "4h") -> dict:
 
     pivots = zig_zag(df_recent, depth=12, deviation=5, backstep=3)
 
-    # تمام نقاط زیگزاگ (از نقطه دوم به بعد)
+    # تمام نقاط زیگزاگ (فقط قیمت کلوز کندل چرخش)
     reversal_prices = []
-    for i, (idx, price, ptype) in enumerate(pivots[1:], start=1):
-        t = to-Marc_shamsi(df_recent.iloc[idx]['timestamp'])
+    for i, (idx, price, ptype) in enumerate(pivots[1:], start=1):  # از نقطه دوم
+        t = to_shamsi(df_recent.iloc[idx]['timestamp'])
         arrow = "Up" if ptype == 'high' else "Down"
         reversal_prices.append(f"{arrow} نقطه #{i}: ${price:,.2f} — {t}")
 
@@ -105,11 +104,13 @@ def analyze(symbol: str, interval: str = "4h") -> dict:
         suggestion = "صبر کن"
     else:
         last_two = reversal_prices[-2:]
-        if "Up" in last_two[-1] and "Down" in last_two[-2]:
-            trend = "صعودی"
+        last_is_up = "Up" in last_two[-1]
+        prev_is_down = "Down" in last_two[-2] if len(last_two) > 1 else False
+        if last_is_up and prev_is_down:
+            trend = "صعودی قوی"
             suggestion = "لانگ یا هولد"
-        elif "Down" in last_two[-1] and "Up" in last_two[-2]:
-            trend = "نزولی"
+        elif not last_is_up and "Up" in last_two[-2]:
+            trend = "نزولی قوی"
             suggestion = "شورت یا صبر"
         else:
             trend = "رنج / ساید وی"
@@ -120,11 +121,12 @@ def analyze(symbol: str, interval: str = "4h") -> dict:
         "price": f"${df_recent['close'].iloc[-1]:,.2f}",
         "trend": trend,
         "suggestion": suggestion,
-        "start_point": f"شروع از: ${start_price:,.2f} — {start_time}",
+        "start_point": f"شروع زیگزاگ: ${start_price:,.2f} — {start_time}",
         "reversal_prices": reversal_prices[::-1],  # جدید → قدیم
         "total_points": len(reversal_prices),
         "time": to_shamsi(datetime.now()),
     }
 
-    CACHE[cache_key]	al = (df_recent, result, now)
+    # خط درست شده
+    CACHE[cache_key] = (df_recent, result, now)
     return result
