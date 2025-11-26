@@ -792,34 +792,20 @@ async def handle_tech_callback(update: Update, context: ContextTypes.DEFAULT_TYP
         extremes_text = "\n".join(extremes) if extremes else "در حال تشکیل..."
 
         text = f"""
-<b>تحلیل تکنیکال حرفه‌ای {result["symbol"]}/USDT</b>
+        <b>تحلیل زیگزاگ حرفه‌ای {result["symbol"]}/USDT</b>
 
-تایم‌فریم: ۴ ساعته (۳۰۰ کندل اخیر)
-روش: <b>زیگزاگ واقعی (Depth 12 • Deviation 5%)</b>
+        قیمت فعلی: <b>{result["price"]}</b>
+        روند: <b>{result["trend"]}</b>
+        پیشنهاد: <b>{result["suggestion"]}</b>
 
-قیمت فعلی: <b>{result["price"]}</b>
-روند کلی: <b>{result["trend"]}</b>
-پیشنهاد معاملاتی: <b>{result["suggestion"]}</b>
+        <b>{result["start_point"]}</b>
 
-<b>نقطه شروع زیگزاگ:</b>
-→ {result["start_point"]}
+       <b>نقاط زیگزاگ (دقیقاً مثل تریدینگ‌ویو):</b>
+       """ + "\n".join(result["reversal_prices"][-7:]) + f"""
 
-<b>آخرین اکستریم‌ها (جدید → قدیم):</b>
-{extremes_text}
-
-تعداد کل اکستریم‌ها: <b>{result["total_extremes"]}</b>
-{result["rsi"]}
-
-{result["time"]}
+      تعداد کل نقاط: <b>{result["total_points"]}</b>
+      {result["time"]}
         """.strip()
-
-        keyboard = [[InlineKeyboardButton("بستن", callback_data="close_tech")]]
-        await query.message.reply_text(
-            text,
-            parse_mode="HTML",
-            reply_markup=InlineKeyboardMarkup(keyboard),
-            disable_web_page_preview=True
-        )
 
     except Exception as e:
         print(f"خطا در تحلیل تکنیکال {symbol}: {e}")
