@@ -1,4 +1,8 @@
 # main.py
+# نسخهٔ نهایی: مینیمال، دوستانه، گزارش CMC ساعتی با تاریخ شمسی،
+# دکمهٔ وضعیت کلی بازار فقط برای مشترکین، دکمهٔ اشتراک/بررسی اشتراک،
+# نمایش اطلاعات تکمیلی برای مشترکین و نمایش کانترکت‌ها (درصورت وجود).
+# دکمه‌ها در کیبورد پایین ربات (نه inline) 
 
 import os
 import requests
@@ -18,9 +22,7 @@ import telegram.error
 import psycopg2
 from psycopg2.extras import DictCursor
 from deep_analysis import get_deep_analysis, init_cache_table
-import math
-from technical_analysis import analyze_from_df
-
+from technical_analysis import analyze as tech_analyze
 
 # -------------------------
 # تنظیمات محیطی
@@ -766,142 +768,78 @@ async def handle_tech_callback(update: Update, context: ContextTypes.DEFAULT_TYP
     subscribed, _ = check_subscription_status(user_id)
 
     if not subscribed:
-        await query.edit_message_text(
-            "تحلیل تکنیکال پیشرفته فقط برای مشترکین فعال است.\n"
-            "برای فعال‌سازی اشتراک از دکمه «اشتراک و پرداخت» استفاده کن.",
-            reply_markup=InlineKeyboardMarkup([[
-                InlineKeyboardButton("اشتراک و پرداخت", callback_data="subscribe_info")
-            ]])
-        )
+        await query.edit_message_text("تحلیل تکنیکال پیشرفته فقط برای مشترکین فعاله!")
         return
 
     symbol = query.data[len("tech_"):].upper()
 
     # پیام لودینگ
     loading_msg = await query.message.reply_text(
-        f"در حال تحلیل اکستریم‌های {symbol}/USDT (۴ ساعته)... ⏳\n"
-        "از ۳۰۰ کندل آخر با ZigZag (5%)"
+        f"در حال تحلیل تکنیکال {symbol}/USDT با الگوریتم زیگزاگ...\n"
+        "از ۳۰۰ کندل آخر ۴ ساعته استفاده می‌شه ⏳"
     )
 
+    # فراخوانی تحلیل جدید (زیگزاگ)
+    from technical_analysis import analyze as tech_analyze
+    result = tech_analyze(symbol)
+
+    # حذف پیام لودینگ
     try:
-        result = tech_analyze(symbol)
+        await loading_msg.delete()
+    except:
+        pass
 
-        if "error" in result:
-            text = f"⚠️ خطا در تحلیل {symbol}:\n{result['error']}"
-        else:
-            levels = "\n".join(result.get("key_levels", []))
-            if not levels:
-                levels = "هیچ سطح کلیدی معتبری شناسایی نشد."
-
-            trend_emoji = "صعودی" if "صعودی" in result["trend"] else \
-                          "نزولی" if "نزولی" in result["trend"] else \
-                          "سایدوی"
-
-            text = f"""تحلیل ساختار قیمتی {result["symbol"]}/USDT
-تایم‌فریم: ۴ ساعته | ZigZag (5%)
-
-<b>روند فعلی: {trend_emoji} {result["trend"]}</b>
-
-<b>نقطه شروع (کلوز کندل ۳۰۰ام):</b>
-{result.get("reference", "نامشخص")}
-
-<b>سطوح کلیدی در جهت روند:</b>
-{levels}
-
-<b>به‌روزرسانی:</b> {to_shamsi(datetime.now())}"""
-
-        # حذف لودینگ و ارسال نتیجه
-        try:
-            await loading_msg.delete()
-        except:
-            pass
-
-        keyboard = [[InlineKeyboardButton("بستن", callback_data="close_tech")]]
+    if "error" in result:
         await query.message.reply_text(
-            text.strip(),
-            parse_mode="HTML",
-            reply_markup=InlineKeyboardMarkup(keyboard),
-            disable_web_page_preview=True
+            f"خطا در دریافت داده‌های بایننس برای {symbol}\n"
+            "دقایقی دیگه دوباره امتحان کن یا نماد رو چک کن."
         )
-
-    except Exception as e:
-        try:
-            await loading_msg.edit_text(f"خطا در پردازش تحلیل: {str(e)}")
-        except:
-            pass
-
-import requests
-import math
-from technical_analysis import analyze_from_df
-
-# اضافه کن در main.py:
-async def handle_tech_callback(update, context):
-    query = update.callback_query
-    await query.answer()
-    symbol = query.data[len("tech_"):].upper()
-
-    # چک اشتراک
-    user_id = query.from_user.id
-    subscribed, _ = check_subscription_status(user_id)
-    if not subscribed:
-        await query.message.reply_text("برای دیدن تحلیل تکنیکال نیاز به اشتراک داری.")
         return
 
-    loading = await query.message.reply_text(f"در حال گرفتن کندل‌ها و اجرای زیگ‌زاگ برای {symbol} ...")
+    # آماده‌سازی متن خروجی
+    trend_emoji = {
+        "صعودی قوی": "Strong Up",
+        "صعودی": "Up",
+        "نزولی قوی": "Strong Down",
+        "نزولی": "Down",
+        "ساید وی": "Sideways",
+        "خنثی": "Neutral",
+        "نامشخص": "Question"
+    }.get(result["trend"].split()[0], "Neutral")
 
-    try:
-        # تبدیل به نماد بایننس: اگر کاربر BTC یا ETH داده، معمولا نماد در بایننس مثل BTCUSDT
-        binance_symbol = f"{symbol}USDT"
+    text = f"""
+<b>تحلیل تکنیکال پیشرفته {result["symbol"]}/USDT</b>
 
-        url = "https://api.binance.com/api/v3/klines"
-        params = {
-            "symbol": binance_symbol,
-            "interval": "4h",
-            "limit": 300
-        }
-        resp = requests.get(url, params=params, timeout=10)
-        resp.raise_for_status()
-        klines = resp.json()  # هر آیتم: [openTime, open, high, low, close, ...]
-        if not klines:
-            raise Exception("کندل پیدا نشد")
+تایم‌فریم: ۴ ساعته (۳۰۰ کندل اخیر)
+روش تشخیص روند: <b>زیگزاگ حرفه‌ای (Depth 12 | Deviation 5%)</b>
 
-        # ساخت دیتا‌فریم با 300 کندل (صعودی از قدیم به جدید)
-        df = pd.DataFrame(klines, columns=[
-            "open_time","open","high","low","close","volume","close_time",
-            "qav","num_trades","taker_base_vol","taker_quote_vol","ignore"
-        ])
-        df['close'] = df['close'].astype(float)
-        df['open_time'] = pd.to_datetime(df['open_time'], unit='ms')
-        df = df.reset_index(drop=True)
+قیمت فعلی: <b>{result["price"]}</b>
+روند کلی: <b>{result["trend"]}</b>
+پیشنهاد معاملاتی: <b>{result["suggestion"]}</b>
 
-        # نکته‌ی توصیف تو: "کلوز کندل ۳۰۰ ام نقطه شروع رسم زیگزاگ" — ما ۳۰۰ کندل گرفتیم و analyze از تمام این‌ها استفاده می‌کنه
-        result = analyze_from_df(df, depth=12, deviation=5, backstep=3)
+آخرین اکستریم زیگزاگ:
+→ {result.get("last_pivot", "نامشخص")}
 
-        trend = result.get('trend', 'نامشخص')
-        reason = result.get('reason', '')
-        extrema = result.get('extrema', [])
+تعداد نقاط کلیدی زیگزاگ: <b>{result.get("zigzag_points", 0)}</b>
 
-        # پیام خلاصه
-        txt = f"📊 تحلیل تکنیکال (۴ساعته) برای <b>{symbol}</b>:\n\n"
-        txt += f"روند: <b>{trend}</b>\n"
-        if reason:
-            txt += f"علت: {reason}\n"
-        txt += f"\nتعداد اکستریماهای شناسایی‌شده: {len(extrema)}\n"
-        txt += "\n(از آخرین ۳۰۰ کندل بررسی شد)\n"
+{result["rsi"]}
 
-        # دکمه بستن
-        keyboard = [[InlineKeyboardButton("بستن", callback_data="close_tech")]]
+سطوح مهم:
+""" + "\n".join([f"   • {level}" for level in result.get("key_levels", ["در حال تشکیل..."])]) + f"""
 
-        await loading.delete()
-        await query.message.reply_text(txt, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(keyboard))
-    except Exception as e:
-        print(f"handle_tech_callback error for {symbol}: {e}")
-        try:
-            await loading.delete()
-        except:
-            pass
-        await query.message.reply_text("خطا در دریافت یا تحلیل کندل‌ها. مطمئن شو نماد صحیحه و بایننس اون جفت رو داره.")
+{result["time"]}
+    """.strip()
 
+    # دکمه بستن
+    keyboard = [[InlineKeyboardButton("بستن", callback_data="close_tech")]]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    await query.message.reply_text(
+        text,
+        parse_mode="HTML",
+        reply_markup=reply_markup,
+        disable_web_page_preview=True
+    )
 
 
 # هندلر بستن تحلیل تکنیکال
