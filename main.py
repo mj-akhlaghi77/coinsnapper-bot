@@ -791,22 +791,23 @@ async def handle_tech_callback(update: Update, context: ContextTypes.DEFAULT_TYP
         extremes = result["extreme_points"][-6:] if len(result["extreme_points"]) > 6 else result["extreme_points"]
         extremes_text = "\n".join(extremes) if extremes else "در حال تشکیل..."
 
-        text = f"""
-        <b>تحلیل زیگزاگ حرفه‌ای {result["symbol"]}/USDT</b>
+            text = f"""
+<b>تحلیل زیگزاگ حرفه‌ای {result["symbol"]}/USDT</b>
 
-        قیمت فعلی: <b>{result["price"]}</b>
-        روند: <b>{result["trend"]}</b>
-        پیشنهاد: <b>{result["suggestion"]}</b>
+قیمت فعلی: <b>{result["price"]}</b>
+روند: <b>{result["trend"]}</b>
+پیشنهاد: <b>{result["suggestion"]}</b>
 
-        <b>{result["start_point"]}</b>
+<b>{result["start_point"]}</b>
 
-       <b>نقاط زیگزاگ (دقیقاً مثل تریدینگ‌ویو):</b>
-       """ + "\n".join(result["reversal_prices"][-7:]) + f"""
+<b>نقاط زیگزاگ (دقیقاً مثل تریدینگ‌ویو):</b>
+""" + "\n".join(result["reversal_prices"][-7:]) + f"""
 
-      تعداد کل نقاط: <b>{result["total_points"]}</b>
-      {result["time"]}
+تعداد کل نقاط: <b>{result["total_points"]}</b>
+{result["time"]}
         """.strip()
 
+        
     except Exception as e:
         print(f"خطا در تحلیل تکنیکال {symbol}: {e}")
         try:
